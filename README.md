@@ -1,6 +1,28 @@
-# UPET / Airrobo Cat Litter Box for Home Assistant
+# UPET / Airrobo Cat Litter Box (Multi-Region) for Home Assistant
+
+## EN
+
+This fork was created because the original integration currently appears to be unmaintained, and attempts to contact its author have not received a response.
+
+It adds a country selection dialog during setup and routes requests to the appropriate regional UPET server. In particular, this resolves the misleading **“Authentication failed. Check account and password.”** error affecting accounts whose region is set to Russia.
+
+A huge thank you to [@CrazzyBerg](https://github.com/CrazzyBerg), the author of the [original integration](https://github.com/CrazzyBerg/upet-hass). They did the hard work that made this project possible; this fork builds on that foundation rather than replacing it. ❤️
+
+And, of course, thank you to ❤️**UPET / Airrobo**❤️ for creating the hardware and app that inspired this community integration. If your cat needs a smarter throne, please consider supporting the people who made it by choosing an official UPET / Airrobo litter box. 🐈💩
 
 Custom Home Assistant integration for UPET / Airrobo smart cat litter boxes.
+
+## RU
+
+Этот форк был создан, поскольку оригинальная интеграция, судя по всему, больше не поддерживается, а попытки связаться с её автором остались без ответа.
+
+В форк добавлен диалог выбора страны при настройке, а запросы направляются на соответствующий региональный сервер UPET. В частности, это исправляет ошибочное сообщение **«Authentication failed. Check account and password.»**, которое появлялось при использовании аккаунтов с регионом Россия.
+
+Огромная благодарность [@CrazzyBerg](https://github.com/CrazzyBerg), автору [оригинальной интеграции](https://github.com/CrazzyBerg/upet-hass). Именно он проделал основную работу, благодаря которой этот проект стал возможен; данный форк развивает заложенную им основу, а не заменяет её. ❤️
+
+И, конечно, спасибо ❤️**UPET / Airrobo**❤️ за устройства и приложение, вдохновившие сообщество на создание этой интеграции. Если вашему коту нужен более умный трон, поддержите его создателей, выбрав официальный кошачий лоток UPET / Airrobo. 🐈💩
+
+Пользовательская интеграция Home Assistant для умных кошачьих лотков UPET / Airrobo.
 
 This integration uses the vendor cloud API for account/device data and the vendor IM/MQTT channel for live work commands and work-state polling.
 
@@ -50,9 +72,9 @@ Install through HACS as a custom repository:
 1. Open HACS in Home Assistant.
 2. Go to `Integrations`.
 3. Open the three-dot menu and choose `Custom repositories`.
-4. Add `https://github.com/CrazzyBerg/upet-hass`.
+4. Add `https://github.com/PnnnG/upet-hass-multi-region`.
 5. Select category `Integration`.
-6. Install `UPET / Airrobo Cat Litter Box`.
+6. Install `UPET / Airrobo Cat Litter Box (Multi-Region)`.
 
 Restart Home Assistant after installation.
 
@@ -66,26 +88,26 @@ Manual installation is also possible by copying this repository's
 Add the integration from Home Assistant:
 
 ```text
-Settings -> Devices & services -> Add integration -> UPET / Airrobo Cat Litter Box
+Settings -> Devices & services -> Add integration -> UPET / Airrobo Cat Litter Box (Multi-Region)
 ```
 
 ## Configuration
 
 Required fields:
 
+- `Country`: select the same country that is configured in the official UPET app.
 - `Account`: UPET/Airrobo login account.
 - `Password`: plain account password. The integration hashes it internally before sending it to the API.
 
-The integration also needs vendor app/API fields:
+The integration selects the regional API endpoint from the chosen country. It also needs these vendor app/API fields:
 
-- `BASE_URL`
 - `APP_ID`
 - `APP_KEY`
 - `PRODUCT`
 
 Bundled app defaults are included with the integration, so normal setup asks
-only for account and password. The app defaults are stored in obfuscated form
-to keep raw values out of the repository.
+only for country, account, and password. Sensitive app defaults are stored in
+obfuscated form to keep raw values out of the repository.
 
 If you maintain a private deployment and want to override the bundled defaults,
 use `custom_components/ubpet/secrets.py.example` as a template for a private

@@ -29,6 +29,7 @@ def load_config_flow_module():
     const.CONF_APP_KEY = "app_key"
     const.CONF_AREA_CODE = "area_code"
     const.CONF_BASE_URL = "base_url"
+    const.CONF_COUNTRY = "country"
     const.CONF_DEVICE_ID = "device_id"
     const.CONF_PRODUCT = "product"
     const.DEFAULT_APP_ID = "default-app-id"
@@ -37,6 +38,9 @@ def load_config_flow_module():
     const.DEFAULT_BASE_URL = "https://example.test"
     const.DEFAULT_PRODUCT = "default-product"
     const.DOMAIN = "ubpet"
+    const.EU_BASE_URL = "https://apis-eu.example.test"
+    const.RUSSIA_BASE_URL = "https://apis-ru.example.test"
+    const.SUPPORTED_COUNTRIES = ("DE", "RU")
     sys.modules[const.__name__] = const
 
     voluptuous = types.ModuleType("voluptuous")
@@ -91,6 +95,29 @@ api, config_flow = load_config_flow_module()
 
 
 class ConfigFlowUnitTests(unittest.TestCase):
+    def test_country_routing_uses_russian_endpoint(self):
+        data = config_flow._country_connection_data(
+            {"country": "ru", "username": "user@example.com", "password": "secret"}
+        )
+
+        self.assertEqual(data["country"], "RU")
+        self.assertEqual(data["area_code"], "RU")
+        self.assertEqual(data["base_url"], "https://apis-ru.example.test")
+
+    def test_country_routing_uses_european_endpoint_and_country_code(self):
+        data = config_flow._country_connection_data(
+            {"country": "DE", "username": "user@example.com", "password": "secret"}
+        )
+
+        self.assertEqual(data["area_code"], "DE")
+        self.assertEqual(data["base_url"], "https://apis-eu.example.test")
+
+    def test_country_routing_rejects_unsupported_country(self):
+        with self.assertRaises(ValueError):
+            config_flow._country_connection_data(
+                {"country": "US", "username": "user@example.com", "password": "secret"}
+            )
+
     def test_error_mapping_distinguishes_validation_stages(self):
         cases = (
             (api.UbpetAuthenticationError(400, {"code": 2004}, stage="login"), "auth_failed"),

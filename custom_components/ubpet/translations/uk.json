@@ -2,9 +2,10 @@
   "config": {
     "step": {
       "user": {
-        "title": "UPET / Airrobo котячий туалет",
-        "description": "Введіть облікові дані UPET/Airrobo, для яких у застосунку вибрано регіон Росія.",
+        "title": "UPET / Airrobo котячий туалет (Multi-Region)",
+        "description": "Виберіть ту саму країну, що й у застосунку UPET, а потім введіть облікові дані.",
         "data": {
+          "country": "Країна",
           "username": "Обліковий запис",
           "password": "Пароль",
           "app_key": "Ключ застосунку",
@@ -20,7 +21,7 @@
       "unexpected_response": "API UPET повернув неочікувану відповідь. Перевірте журнали Home Assistant.",
       "cannot_connect": "Не вдалося підключитися до API UPET.",
       "unknown": "Неочікувана помилка. Перевірте журнали Home Assistant.",
-      "missing_required": "Обліковий запис і пароль обов'язкові."
+      "missing_required": "Країна, обліковий запис і пароль обов'язкові."
     },
     "abort": {
       "already_configured": "Цей обліковий запис уже налаштовано."

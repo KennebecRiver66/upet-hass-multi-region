@@ -25,9 +25,72 @@ except ImportError:
 CONF_APP_KEY = "app_key"
 CONF_APP_ID = "app_id"
 CONF_AREA_CODE = "area_code"
+CONF_COUNTRY = "country"
 CONF_DEVICE_ID = "device_id"
 CONF_BASE_URL = "base_url"
 CONF_PRODUCT = "product"
+
+EU_BASE_URL = "https://apis-eu.airrobo-home.com"
+RUSSIA_BASE_URL = "https://apis-ru.airrobo-home.com"
+
+# Countries returned by the UPET 2.1.14 region map for the standard app.
+SUPPORTED_COUNTRIES = (
+    "AL",
+    "AD",
+    "AT",
+    "BY",
+    "BH",
+    "BE",
+    "BA",
+    "BG",
+    "HR",
+    "CY",
+    "CZ",
+    "DK",
+    "EE",
+    "FO",
+    "FI",
+    "FR",
+    "GE",
+    "DE",
+    "GI",
+    "GR",
+    "HU",
+    "IS",
+    "IE",
+    "IT",
+    "KW",
+    "XK",
+    "LV",
+    "LI",
+    "LT",
+    "LU",
+    "MT",
+    "MD",
+    "MC",
+    "ME",
+    "NL",
+    "MK",
+    "NO",
+    "PT",
+    "PL",
+    "QA",
+    "RO",
+    "RU",
+    "SE",
+    "CH",
+    "SA",
+    "SM",
+    "RS",
+    "SK",
+    "SI",
+    "ES",
+    "TR",
+    "UA",
+    "GB",
+    "AE",
+    "VA",
+)
 
 PLATFORMS = [
     Platform.SENSOR,

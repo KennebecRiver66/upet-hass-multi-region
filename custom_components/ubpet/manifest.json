@@ -1,12 +1,12 @@
 {
   "domain": "ubpet",
-  "name": "UPET / Airrobo Cat Litter Box",
-  "codeowners": ["@CrazzyBerg"],
+  "name": "UPET / Airrobo Cat Litter Box (Multi-Region)",
+  "codeowners": ["@PnnnG"],
   "config_flow": true,
-  "documentation": "https://github.com/PnnnG/upet-hass-actual",
-  "issue_tracker": "https://github.com/PnnnG/upet-hass-actual/issues",
+  "documentation": "https://github.com/PnnnG/upet-hass-multi-region",
+  "issue_tracker": "https://github.com/PnnnG/upet-hass-multi-region/issues",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "1.0.2",
+  "version": "1.1.0",
   "diagnostics": true
 }
