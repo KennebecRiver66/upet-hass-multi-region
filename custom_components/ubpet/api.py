@@ -173,7 +173,6 @@ class UbpetClient:
             "password": _md5_password(self.password),
             "accountType": account_type,
             "areaCode": "",
-            "appId": self.app_id,
         }
         response = self._request_response(
             "PUT", "/user-service-rest/v2/user/login", payload=payload, auth=False

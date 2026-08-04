@@ -84,6 +84,36 @@ class ApiUnitTests(unittest.TestCase):
         self.assertEqual(payload["password"], hashlib.md5(b"plain-password").hexdigest())
         self.assertNotEqual(payload["password"], "plain-password")
 
+    def test_login_payload_matches_upet_2_1_14_contract(self):
+        recorder = UrlopenRecorder(
+            [
+                (
+                    200,
+                    {
+                        "token": {
+                            "token": "token-1",
+                            "refreshToken": None,
+                            "expireAt": 9999999999999,
+                        },
+                        "user": {"userId": 123},
+                    },
+                )
+            ]
+        )
+
+        with patch.object(api.urllib.request, "urlopen", recorder):
+            self.make_client(account="email@example.com", password="plain-password").login()
+
+        self.assertEqual(
+            recorder.payloads()[0],
+            {
+                "account": "email@example.com",
+                "password": hashlib.md5(b"plain-password").hexdigest(),
+                "accountType": "1",
+                "areaCode": "",
+            },
+        )
+
     def test_email_login_tries_email_account_type_first_then_falls_back(self):
         recorder = UrlopenRecorder(
             [
