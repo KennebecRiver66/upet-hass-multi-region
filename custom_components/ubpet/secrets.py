@@ -42,7 +42,10 @@ def _defaults() -> dict[str, str]:
 
 _VALUES = _defaults()
 
-BASE_URL = _VALUES["BASE_URL"]
+# UPET 2.1.14 routes accounts whose selected country is Russia to a
+# dedicated regional API. The host is public configuration, not a secret.
+BASE_URL = "https://apis-ru.airrobo-home.com"
+AREA_CODE = "RU"
 APP_ID = _VALUES["APP_ID"]
 APP_KEY = _VALUES["APP_KEY"]
 PRODUCT = _VALUES["PRODUCT"]

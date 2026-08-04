@@ -9,12 +9,14 @@ DEFAULT_SCAN_INTERVAL = timedelta(minutes=3)
 
 try:
     from .secrets import (
+        AREA_CODE as DEFAULT_AREA_CODE,
         APP_ID as DEFAULT_APP_ID,
         APP_KEY as DEFAULT_APP_KEY,
         BASE_URL as DEFAULT_BASE_URL,
         PRODUCT as DEFAULT_PRODUCT,
     )
 except ImportError:
+    DEFAULT_AREA_CODE = ""
     DEFAULT_APP_ID = ""
     DEFAULT_APP_KEY = ""
     DEFAULT_BASE_URL = ""
@@ -22,6 +24,7 @@ except ImportError:
 
 CONF_APP_KEY = "app_key"
 CONF_APP_ID = "app_id"
+CONF_AREA_CODE = "area_code"
 CONF_DEVICE_ID = "device_id"
 CONF_BASE_URL = "base_url"
 CONF_PRODUCT = "product"

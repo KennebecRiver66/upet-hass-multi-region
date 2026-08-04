@@ -27,11 +27,13 @@ def load_config_flow_module():
     const = types.ModuleType(f"{PACKAGE_NAME}.const")
     const.CONF_APP_ID = "app_id"
     const.CONF_APP_KEY = "app_key"
+    const.CONF_AREA_CODE = "area_code"
     const.CONF_BASE_URL = "base_url"
     const.CONF_DEVICE_ID = "device_id"
     const.CONF_PRODUCT = "product"
     const.DEFAULT_APP_ID = "default-app-id"
     const.DEFAULT_APP_KEY = "default-app-key"
+    const.DEFAULT_AREA_CODE = "RU"
     const.DEFAULT_BASE_URL = "https://example.test"
     const.DEFAULT_PRODUCT = "default-product"
     const.DOMAIN = "ubpet"
@@ -102,9 +104,11 @@ class ConfigFlowUnitTests(unittest.TestCase):
                 self.assertEqual(config_flow._error_key_for_exception(error), expected)
 
     def test_successful_login_then_device_list_failure_is_not_auth_failure(self):
+        captured = {}
+
         class FakeClient:
             def __init__(self, **kwargs):
-                pass
+                captured.update(kwargs)
 
             def login(self):
                 return api.UbpetAuth(
@@ -127,6 +131,7 @@ class ConfigFlowUnitTests(unittest.TestCase):
             "app_key": "app-key",
             "app_id": "app-id",
             "base_url": "https://example.test",
+            "area_code": "RU",
             "product": "product",
             "device_id": "device-id",
         }
@@ -142,6 +147,8 @@ class ConfigFlowUnitTests(unittest.TestCase):
             config_flow._error_key_for_exception(raised.exception),
             "auth_failed",
         )
+        self.assertEqual(captured["base_url"], "https://example.test")
+        self.assertEqual(captured["area_code"], "RU")
 
 
 if __name__ == "__main__":

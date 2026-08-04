@@ -19,11 +19,13 @@ from .api import (
     UbpetUnexpectedResponseError,
 )
 from .const import (
+    CONF_AREA_CODE,
     CONF_APP_ID,
     CONF_APP_KEY,
     CONF_BASE_URL,
     CONF_DEVICE_ID,
     CONF_PRODUCT,
+    DEFAULT_AREA_CODE,
     DEFAULT_APP_ID,
     DEFAULT_APP_KEY,
     DEFAULT_BASE_URL,
@@ -70,6 +72,7 @@ def _validate_input(data: dict[str, Any]) -> list[dict[str, Any]]:
         app_id=app_id,
         base_url=base_url,
         product=product,
+        area_code=_clean_optional_string(data.get(CONF_AREA_CODE)),
     )
     client.login()
     return client.get_devices()
@@ -79,6 +82,10 @@ def _clean_required_string(value: Any) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("required value is empty")
     return value.strip()
+
+
+def _clean_optional_string(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _error_key_for_exception(err: Exception) -> str:
@@ -105,6 +112,7 @@ class UbpetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 **user_input,
                 CONF_APP_KEY: DEFAULT_APP_KEY or user_input.get(CONF_APP_KEY),
                 CONF_APP_ID: DEFAULT_APP_ID or user_input.get(CONF_APP_ID),
+                CONF_AREA_CODE: DEFAULT_AREA_CODE,
                 CONF_BASE_URL: DEFAULT_BASE_URL or user_input.get(CONF_BASE_URL),
                 CONF_PRODUCT: DEFAULT_PRODUCT or user_input.get(CONF_PRODUCT),
                 CONF_DEVICE_ID: uuid.uuid4().hex,
@@ -137,6 +145,7 @@ class UbpetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "account": _clean_required_string(user_input[CONF_USERNAME]),
                         "password": _clean_required_string(user_input[CONF_PASSWORD]),
                         CONF_APP_KEY: _clean_required_string(connection_data[CONF_APP_KEY]),
+                        CONF_AREA_CODE: _clean_optional_string(connection_data[CONF_AREA_CODE]),
                         CONF_DEVICE_ID: connection_data[CONF_DEVICE_ID],
                         CONF_APP_ID: app_id,
                         CONF_BASE_URL: _clean_required_string(connection_data[CONF_BASE_URL]),

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "UPET / Airrobo Cat Litter Box",
-        "description": "Enter your UPET/Airrobo account credentials. App credentials and region endpoint are detected from the recovered working API flow.",
+        "description": "Enter the credentials for an UPET/Airrobo account whose app region is set to Russia.",
         "data": {
           "username": "Account",
           "password": "Password",

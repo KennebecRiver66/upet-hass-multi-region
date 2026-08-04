@@ -120,6 +120,7 @@ class UbpetClient:
         base_url: str,
         app_id: str,
         product: str,
+        area_code: str = "",
     ) -> None:
         self.account = account
         self.password = password
@@ -127,6 +128,7 @@ class UbpetClient:
         self.base_url = base_url.rstrip("/")
         self.app_id = app_id
         self.product = product
+        self.area_code = area_code
         self.signer = UbtV2Signer(app_key)
         self.auth: UbpetAuth | None = None
 
@@ -172,7 +174,7 @@ class UbpetClient:
             "account": self.account,
             "password": _md5_password(self.password),
             "accountType": account_type,
-            "areaCode": "",
+            "areaCode": self.area_code,
         }
         response = self._request_response(
             "PUT", "/user-service-rest/v2/user/login", payload=payload, auth=False

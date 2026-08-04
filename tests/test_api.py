@@ -52,7 +52,7 @@ class UrlopenRecorder:
 
 
 class ApiUnitTests(unittest.TestCase):
-    def make_client(self, account="user@example.com", password="secret"):
+    def make_client(self, account="user@example.com", password="secret", area_code=""):
         return api.UbpetClient(
             account=account,
             password=password,
@@ -61,6 +61,7 @@ class ApiUnitTests(unittest.TestCase):
             base_url="https://example.test",
             app_id="test-app-id",
             product="test-product",
+            area_code=area_code,
         )
 
     def test_password_is_always_md5_hashed_for_login(self):
@@ -102,7 +103,11 @@ class ApiUnitTests(unittest.TestCase):
         )
 
         with patch.object(api.urllib.request, "urlopen", recorder):
-            self.make_client(account="email@example.com", password="plain-password").login()
+            self.make_client(
+                account="email@example.com",
+                password="plain-password",
+                area_code="RU",
+            ).login()
 
         self.assertEqual(
             recorder.payloads()[0],
@@ -110,7 +115,7 @@ class ApiUnitTests(unittest.TestCase):
                 "account": "email@example.com",
                 "password": hashlib.md5(b"plain-password").hexdigest(),
                 "accountType": "1",
-                "areaCode": "",
+                "areaCode": "RU",
             },
         )
 

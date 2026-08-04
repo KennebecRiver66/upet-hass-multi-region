@@ -9,11 +9,13 @@ from homeassistant.helpers.event import async_call_later
 
 from .api import UbpetClient
 from .const import (
+    CONF_AREA_CODE,
     CONF_APP_ID,
     CONF_APP_KEY,
     CONF_BASE_URL,
     CONF_DEVICE_ID,
     CONF_PRODUCT,
+    DEFAULT_AREA_CODE,
     DEFAULT_APP_ID,
     DEFAULT_APP_KEY,
     DEFAULT_BASE_URL,
@@ -31,6 +33,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     app_key = entry.data.get(CONF_APP_KEY, DEFAULT_APP_KEY)
     app_id = entry.data.get(CONF_APP_ID, DEFAULT_APP_ID)
     base_url = entry.data.get(CONF_BASE_URL, DEFAULT_BASE_URL)
+    area_code = entry.data.get(CONF_AREA_CODE)
+    if area_code is None:
+        # Entries created before regional routing was added keep their former
+        # endpoint behavior; fresh Russian entries store the country code.
+        area_code = DEFAULT_AREA_CODE if base_url == DEFAULT_BASE_URL else ""
     product = entry.data.get(CONF_PRODUCT, DEFAULT_PRODUCT)
     missing = [
         field
@@ -53,6 +60,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         app_id=app_id,
         base_url=base_url,
         product=product,
+        area_code=area_code,
     )
     coordinator = UbpetDataUpdateCoordinator(hass, client)
     await coordinator.async_config_entry_first_refresh()
