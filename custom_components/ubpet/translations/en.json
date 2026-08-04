@@ -16,6 +16,8 @@
     },
     "error": {
       "auth_failed": "Authentication failed. Check account and password.",
+      "device_list_failed": "Authentication succeeded, but the device list could not be loaded. Check Home Assistant logs.",
+      "unexpected_response": "The UPET API returned an unexpected response. Check Home Assistant logs.",
       "cannot_connect": "Could not connect to the UPET API.",
       "unknown": "Unexpected error. Check Home Assistant logs.",
       "missing_required": "Account and password are required."

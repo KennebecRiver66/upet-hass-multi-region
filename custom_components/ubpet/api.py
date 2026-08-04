@@ -7,6 +7,7 @@ import json
 import logging
 from pathlib import Path
 import random
+import re
 import sys
 import time
 from typing import Any
@@ -39,18 +40,47 @@ QUICK_MQTT_REPLY_SERVICES = {
     "start_rise",
     "start_drop",
 }
+SENSITIVE_RESPONSE_KEYS = {
+    "accesstoken",
+    "appkey",
+    "authorization",
+    "mqttpassword",
+    "mqttusername",
+    "password",
+    "refreshtoken",
+    "token",
+    "xubtsign",
+}
 _LOGGER = logging.getLogger(__name__)
 
 
 class UbpetApiError(RuntimeError):
-    def __init__(self, status: int, payload: Any) -> None:
+    def __init__(self, status: int, payload: Any, *, stage: str | None = None) -> None:
         self.status = status
         self.payload = payload
+        self.stage = stage
         code = payload.get("code") if isinstance(payload, dict) else None
-        message = None
-        if isinstance(payload, dict):
-            message = payload.get("message") or payload.get("msg")
-        super().__init__(f"UPET API error status={status} code={code} message={message}")
+        super().__init__(f"UPET API error stage={stage or 'request'} status={status} code={code}")
+
+
+class UbpetAuthenticationError(UbpetApiError):
+    """The vendor rejected every login attempt."""
+
+
+class UbpetUnexpectedResponseError(UbpetApiError):
+    """The vendor returned a response shape that cannot be consumed safely."""
+
+
+class UbpetDeviceListError(UbpetApiError):
+    """Login succeeded, but the required device-list request failed."""
+
+
+class UbpetConnectionError(OSError):
+    """The vendor API could not be reached at a known validation stage."""
+
+    def __init__(self, *, stage: str) -> None:
+        self.stage = stage
+        super().__init__(f"UPET connection error stage={stage}")
 
 
 @dataclass(slots=True)
@@ -59,6 +89,12 @@ class UbpetAuth:
     refresh_token: str | None
     expires_at_ms: int | None
     user_id: int | None
+
+
+@dataclass(slots=True)
+class UbpetHttpResponse:
+    status: int
+    data: Any
 
 
 class UbtV2Signer:
@@ -105,11 +141,28 @@ class UbpetClient:
         last_error: UbpetApiError | None = None
         for account_type in _account_type_candidates(self.account):
             try:
-                _LOGGER.info("Trying UPET login with accountType=%s", account_type)
                 return self._login_with_account_type(account_type)
-            except UbpetApiError as err:
-                _LOGGER.warning("UPET login failed with accountType=%s: %s", account_type, err)
+            except UbpetUnexpectedResponseError as err:
                 last_error = err
+            except UbpetApiError as err:
+                _log_api_diagnostic(
+                    stage="login",
+                    account=self.account,
+                    account_type=account_type,
+                    status=err.status,
+                    payload=err.payload,
+                    sensitive_values=self._diagnostic_sensitive_values(),
+                    level=logging.WARNING,
+                )
+                last_error = UbpetAuthenticationError(err.status, err.payload, stage="login")
+            except OSError as err:
+                _log_transport_diagnostic(
+                    stage="login",
+                    account=self.account,
+                    account_type=account_type,
+                    error=err,
+                )
+                raise UbpetConnectionError(stage="login") from err
         if last_error is not None:
             raise last_error
         raise RuntimeError("no account type candidates")
@@ -122,23 +175,86 @@ class UbpetClient:
             "areaCode": "",
             "appId": self.app_id,
         }
-        data = self._request("PUT", "/user-service-rest/v2/user/login", payload=payload, auth=False)
-        token_data = data.get("token") if isinstance(data, dict) else None
-        user_data = data.get("user") if isinstance(data, dict) else None
-        if not isinstance(token_data, dict) or not token_data.get("token"):
-            raise UbpetApiError(200, data)
+        response = self._request_response(
+            "PUT", "/user-service-rest/v2/user/login", payload=payload, auth=False
+        )
+        try:
+            token_data, user_data = _extract_login_data(response.data, status=response.status)
+        except UbpetUnexpectedResponseError:
+            _log_api_diagnostic(
+                stage="login",
+                account=self.account,
+                account_type=account_type,
+                status=response.status,
+                payload=response.data,
+                sensitive_values=self._diagnostic_sensitive_values(),
+                level=logging.WARNING,
+            )
+            raise
         self.auth = UbpetAuth(
             token=token_data["token"],
             refresh_token=token_data.get("refreshToken"),
             expires_at_ms=token_data.get("expireAt"),
             user_id=user_data.get("userId") if isinstance(user_data, dict) else None,
         )
-        _LOGGER.info("UPET login succeeded with accountType=%s", account_type)
+        _log_api_diagnostic(
+            stage="login",
+            account=self.account,
+            account_type=account_type,
+            status=response.status,
+            payload=response.data,
+            sensitive_values=self._diagnostic_sensitive_values(),
+            level=logging.INFO,
+        )
         return self.auth
 
     def get_devices(self) -> list[dict[str, Any]]:
-        data = self._request("GET", "/user-service-rest/v2/robot/common/device/list", auth=True)
-        return _require_list(data)
+        try:
+            response = self._request_response(
+                "GET", "/user-service-rest/v2/robot/common/device/list", auth=True
+            )
+        except UbpetApiError as err:
+            _log_api_diagnostic(
+                stage="device_list",
+                account=self.account,
+                account_type=None,
+                status=err.status,
+                payload=err.payload,
+                sensitive_values=self._diagnostic_sensitive_values(),
+                level=logging.WARNING,
+            )
+            raise UbpetDeviceListError(err.status, err.payload, stage="device_list") from err
+        except OSError as err:
+            _log_transport_diagnostic(
+                stage="device_list",
+                account=self.account,
+                account_type=None,
+                error=err,
+            )
+            raise UbpetConnectionError(stage="device_list") from err
+        try:
+            return _require_list(response.data)
+        except UbpetApiError as err:
+            _log_api_diagnostic(
+                stage="device_list",
+                account=self.account,
+                account_type=None,
+                status=response.status,
+                payload=response.data,
+                sensitive_values=self._diagnostic_sensitive_values(),
+                level=logging.WARNING,
+            )
+            raise UbpetUnexpectedResponseError(
+                response.status, err.payload, stage="device_list"
+            ) from err
+
+    def _diagnostic_sensitive_values(self) -> tuple[str, ...]:
+        return (
+            self.account,
+            self.password,
+            _md5_password(self.password),
+            self.signer.app_key,
+        )
 
     def get_all_config(self, serial_number: str) -> dict[str, Any]:
         data = self._request(
@@ -334,6 +450,16 @@ class UbpetClient:
         }
 
     def _request(self, method: str, path: str, *, payload: dict[str, Any] | None = None, auth: bool) -> Any:
+        return self._request_response(method, path, payload=payload, auth=auth).data
+
+    def _request_response(
+        self,
+        method: str,
+        path: str,
+        *,
+        payload: dict[str, Any] | None = None,
+        auth: bool,
+    ) -> UbpetHttpResponse:
         body = None
         if payload is not None:
             body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -370,9 +496,12 @@ class UbpetClient:
                     resp.status,
                     time.monotonic() - started,
                 )
-                return data
+                return UbpetHttpResponse(status=resp.status, data=data)
         except urllib.error.HTTPError as err:
-            data = _decode_response(err.read())
+            try:
+                data = _decode_response(err.read())
+            finally:
+                err.close()
             _LOGGER.warning("UPET HTTP %s %s failed with status=%s", method, path, err.code)
             raise UbpetApiError(err.code, data) from err
 
@@ -385,6 +514,140 @@ def _account_type_candidates(account: str) -> tuple[str, ...]:
     if "@" in account:
         return ("1", "0", "2")
     return ("0", "1", "2")
+
+
+def _extract_login_data(
+    data: Any, *, status: int = 200
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    if not isinstance(data, dict):
+        raise UbpetUnexpectedResponseError(status, data, stage="login")
+
+    payload = data
+    nested = data.get("data")
+    if not isinstance(data.get("token"), dict) and isinstance(nested, dict):
+        payload = nested
+
+    token_data = payload.get("token")
+    user_data = payload.get("user")
+    token = token_data.get("token") if isinstance(token_data, dict) else None
+    if not isinstance(token, str) or not token:
+        raise UbpetUnexpectedResponseError(status, data, stage="login")
+    if user_data is not None and not isinstance(user_data, dict):
+        raise UbpetUnexpectedResponseError(status, data, stage="login")
+    return token_data, user_data
+
+
+def _mask_account(account: str) -> str:
+    if "@" in account:
+        local, domain = account.rsplit("@", 1)
+        prefix = local[:2] if len(local) > 1 else local[:1]
+        return f"{prefix}***@{domain}" if domain else f"{prefix}***"
+    if len(account) <= 4:
+        return "***"
+    return f"{account[:2]}***{account[-2:]}"
+
+
+def _safe_response_summary(
+    payload: Any, *, sensitive_values: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    sensitive_values = (*sensitive_values, *_find_sensitive_response_values(payload))
+    summary: dict[str, Any] = {
+        "response_type": type(payload).__name__,
+        "top_level_keys": [],
+        "has_data": False,
+        "data_type": "missing",
+        "data_keys": [],
+        "api_code": None,
+        "message": None,
+    }
+    if not isinstance(payload, dict):
+        return summary
+
+    summary["top_level_keys"] = sorted(str(key) for key in payload)
+    summary["has_data"] = "data" in payload
+    if "data" in payload:
+        nested = payload.get("data")
+        summary["data_type"] = type(nested).__name__
+        if isinstance(nested, dict):
+            summary["data_keys"] = sorted(str(key) for key in nested)
+
+    code = payload.get("code")
+    if isinstance(code, (str, int, float, bool)) or code is None:
+        summary["api_code"] = _redact_sensitive_text(code, sensitive_values)
+    message = payload.get("message") or payload.get("msg")
+    if isinstance(message, (str, int, float, bool)):
+        summary["message"] = _redact_sensitive_text(message, sensitive_values)
+    return summary
+
+
+def _redact_sensitive_text(value: Any, sensitive_values: tuple[str, ...]) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    for sensitive in sensitive_values:
+        if sensitive:
+            text = re.sub(re.escape(sensitive), "REDACTED", text, flags=re.IGNORECASE)
+    return text[:500]
+
+
+def _find_sensitive_response_values(payload: Any) -> tuple[str, ...]:
+    values: list[str] = []
+    if isinstance(payload, dict):
+        for key, item in payload.items():
+            normalized_key = re.sub(r"[^a-z0-9]", "", str(key).casefold())
+            if normalized_key in SENSITIVE_RESPONSE_KEYS and isinstance(item, (str, int)):
+                values.append(str(item))
+            values.extend(_find_sensitive_response_values(item))
+    elif isinstance(payload, list):
+        for item in payload:
+            values.extend(_find_sensitive_response_values(item))
+    return tuple(values)
+
+
+def _log_api_diagnostic(
+    *,
+    stage: str,
+    account: str,
+    account_type: str | None,
+    status: int,
+    payload: Any,
+    sensitive_values: tuple[str, ...],
+    level: int,
+) -> None:
+    summary = _safe_response_summary(payload, sensitive_values=sensitive_values)
+    _LOGGER.log(
+        level,
+        "UPET API diagnostic stage=%s account=%s accountType=%s http_status=%s "
+        "api_code=%s message=%r response_type=%s top_level_keys=%s has_data=%s "
+        "data_type=%s data_keys=%s",
+        stage,
+        _mask_account(account),
+        account_type,
+        status,
+        summary["api_code"],
+        summary["message"],
+        summary["response_type"],
+        summary["top_level_keys"],
+        summary["has_data"],
+        summary["data_type"],
+        summary["data_keys"],
+    )
+
+
+def _log_transport_diagnostic(
+    *,
+    stage: str,
+    account: str,
+    account_type: str | None,
+    error: OSError,
+) -> None:
+    _LOGGER.warning(
+        "UPET API diagnostic stage=%s account=%s accountType=%s transport_error=%s",
+        stage,
+        _mask_account(account),
+        account_type,
+        type(error).__name__,
+    )
 
 
 def _decode_response(raw: bytes) -> Any:

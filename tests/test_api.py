@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import sys
@@ -120,6 +121,200 @@ class ApiUnitTests(unittest.TestCase):
             self.make_client(account="380001112233").login()
 
         self.assertEqual(recorder.payloads()[0]["accountType"], "0")
+
+    def test_login_accepts_token_and_user_inside_data(self):
+        recorder = UrlopenRecorder(
+            [
+                (
+                    200,
+                    {
+                        "code": 0,
+                        "data": {
+                            "token": {
+                                "token": "nested-token",
+                                "refreshToken": "nested-refresh",
+                                "expireAt": 9999999999999,
+                            },
+                            "user": {"userId": 321},
+                        },
+                    },
+                )
+            ]
+        )
+
+        with patch.object(api.urllib.request, "urlopen", recorder):
+            auth = self.make_client().login()
+
+        self.assertEqual(auth.token, "nested-token")
+        self.assertEqual(auth.refresh_token, "nested-refresh")
+        self.assertEqual(auth.user_id, 321)
+
+    def test_http_200_with_nonzero_api_code_is_authentication_error(self):
+        recorder = UrlopenRecorder([(200, {"code": 2004, "message": "user not found"})] * 3)
+
+        with patch.object(api.urllib.request, "urlopen", recorder):
+            with self.assertRaises(api.UbpetAuthenticationError) as raised:
+                self.make_client().login()
+
+        self.assertEqual(raised.exception.status, 200)
+        self.assertEqual(raised.exception.payload["code"], 2004)
+
+    def test_http_4xx_and_5xx_are_authentication_errors(self):
+        for status in (400, 503):
+            with self.subTest(status=status):
+                def raise_http_error(req, timeout=20):
+                    body = json.dumps(
+                        {"code": status, "message": "request rejected"}
+                    ).encode("utf-8")
+                    raise api.urllib.error.HTTPError(
+                        req.full_url,
+                        status,
+                        "request rejected",
+                        {},
+                        io.BytesIO(body),
+                    )
+
+                with patch.object(api.urllib.request, "urlopen", raise_http_error):
+                    with self.assertRaises(api.UbpetAuthenticationError) as raised:
+                        self.make_client().login()
+                self.assertEqual(raised.exception.status, status)
+
+    def test_login_rejects_json_without_token_as_unexpected_response(self):
+        recorder = UrlopenRecorder([(200, {"code": 0, "data": {"user": {"userId": 1}}})] * 3)
+
+        with patch.object(api.urllib.request, "urlopen", recorder):
+            with self.assertRaises(api.UbpetUnexpectedResponseError) as raised:
+                self.make_client().login()
+
+        self.assertEqual(raised.exception.stage, "login")
+
+    def test_login_rejects_non_json_response_as_unexpected_response(self):
+        recorder = UrlopenRecorder([(200, b"not-json") for _ in range(3)])
+
+        with patch.object(api.urllib.request, "urlopen", recorder):
+            with self.assertRaises(api.UbpetUnexpectedResponseError) as raised:
+                self.make_client().login()
+
+        self.assertIsInstance(raised.exception.payload, str)
+
+    def test_email_login_can_succeed_on_third_account_type(self):
+        recorder = UrlopenRecorder(
+            [
+                (200, {"code": 2004, "message": "user not found"}),
+                (200, {"code": 2004, "message": "user not found"}),
+                (
+                    200,
+                    {
+                        "token": {"token": "token-3", "refreshToken": None},
+                        "user": {"userId": 789},
+                    },
+                ),
+            ]
+        )
+
+        with patch.object(api.urllib.request, "urlopen", recorder):
+            auth = self.make_client().login()
+
+        self.assertEqual(auth.token, "token-3")
+        self.assertEqual(
+            [payload["accountType"] for payload in recorder.payloads()],
+            ["1", "0", "2"],
+        )
+
+    def test_device_list_api_failure_has_separate_exception(self):
+        recorder = UrlopenRecorder(
+            [
+                (
+                    200,
+                    {
+                        "token": {"token": "auth-token", "refreshToken": None},
+                        "user": {"userId": 100},
+                    },
+                ),
+                (503, {"code": 5001, "message": "device service unavailable"}),
+            ]
+        )
+
+        with patch.object(api.urllib.request, "urlopen", recorder):
+            with self.assertRaises(api.UbpetDeviceListError) as raised:
+                self.make_client().get_devices()
+
+        self.assertEqual(raised.exception.stage, "device_list")
+        self.assertEqual(raised.exception.status, 503)
+
+    def test_device_list_bad_shape_is_unexpected_response(self):
+        recorder = UrlopenRecorder(
+            [
+                (
+                    200,
+                    {
+                        "token": {"token": "auth-token", "refreshToken": None},
+                        "user": {"userId": 100},
+                    },
+                ),
+                (200, {"code": 0, "data": {"not": "a list"}}),
+            ]
+        )
+
+        with patch.object(api.urllib.request, "urlopen", recorder):
+            with self.assertRaises(api.UbpetUnexpectedResponseError) as raised:
+                self.make_client().get_devices()
+
+        self.assertEqual(raised.exception.stage, "device_list")
+
+    def test_login_diagnostics_do_not_expose_secrets(self):
+        account = "private@example.com"
+        password = "plain-password"
+        password_hash = hashlib.md5(password.encode("utf-8")).hexdigest()
+        payload = {
+            "code": 2004,
+            "message": (
+                f"rejected {account} {password} {password_hash} app-key "
+                "access-token-value refresh-token-value"
+            ),
+            "data": {
+                "token": {"token": "access-token-value", "refreshToken": "refresh-token-value"},
+                "appKey": "app-key",
+            },
+        }
+        recorder = UrlopenRecorder([(400, payload)] * 3)
+
+        with self.assertLogs(api._LOGGER, level="WARNING") as captured:
+            with patch.object(api.urllib.request, "urlopen", recorder):
+                with self.assertRaises(api.UbpetAuthenticationError):
+                    self.make_client(account=account, password=password).login()
+
+        logs = "\n".join(captured.output)
+        for secret in (
+            account,
+            password,
+            password_hash,
+            "access-token-value",
+            "refresh-token-value",
+            "app-key",
+        ):
+            self.assertNotIn(secret, logs)
+        self.assertIn("pr***@example.com", logs)
+        self.assertIn("stage=login", logs)
+        self.assertIn("accountType=1", logs)
+        self.assertIn("http_status=400", logs)
+        self.assertIn("api_code=2004", logs)
+        self.assertIn("data_keys=['appKey', 'token']", logs)
+
+    def test_connection_error_records_login_stage_without_error_text(self):
+        def fail_to_connect(req, timeout=20):
+            raise OSError("private transport details")
+
+        with self.assertLogs(api._LOGGER, level="WARNING") as captured:
+            with patch.object(api.urllib.request, "urlopen", fail_to_connect):
+                with self.assertRaises(api.UbpetConnectionError) as raised:
+                    self.make_client().login()
+
+        logs = "\n".join(captured.output)
+        self.assertEqual(raised.exception.stage, "login")
+        self.assertIn("stage=login", logs)
+        self.assertIn("transport_error=OSError", logs)
+        self.assertNotIn("private transport details", logs)
 
     def test_authenticated_device_request_sends_auth_headers(self):
         recorder = UrlopenRecorder(
@@ -677,6 +872,10 @@ class DiagnosticsUnitTests(unittest.TestCase):
             "account": "user@example.com",
             "password": "secret",
             "device_id": "device-id",
+            "app_key": "app-key",
+            "accessToken": "access-token",
+            "refresh_token": "refresh-token",
+            "mqttPassword": "mqtt-password",
             "config": {
                 "wifiName": "My_IoT",
                 "gmtTimeZone": "GMT+03:00",
@@ -690,6 +889,10 @@ class DiagnosticsUnitTests(unittest.TestCase):
         self.assertEqual(redacted["account"], diagnostics.REDACTED)
         self.assertEqual(redacted["password"], diagnostics.REDACTED)
         self.assertEqual(redacted["device_id"], diagnostics.REDACTED)
+        self.assertEqual(redacted["app_key"], diagnostics.REDACTED)
+        self.assertEqual(redacted["accessToken"], diagnostics.REDACTED)
+        self.assertEqual(redacted["refresh_token"], diagnostics.REDACTED)
+        self.assertEqual(redacted["mqttPassword"], diagnostics.REDACTED)
         self.assertEqual(redacted["config"]["wifiName"], "My_IoT")
         self.assertEqual(redacted["config"]["gmtTimeZone"], "GMT+03:00")
         self.assertEqual(redacted["cats"][0]["nickname"], "Cat")

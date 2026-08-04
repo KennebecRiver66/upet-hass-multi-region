@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 import uuid
 
@@ -10,7 +11,13 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
-from .api import UbpetApiError, UbpetClient
+from .api import (
+    UbpetApiError,
+    UbpetAuthenticationError,
+    UbpetClient,
+    UbpetDeviceListError,
+    UbpetUnexpectedResponseError,
+)
 from .const import (
     CONF_APP_ID,
     CONF_APP_KEY,
@@ -23,6 +30,8 @@ from .const import (
     DEFAULT_PRODUCT,
     DOMAIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -72,6 +81,20 @@ def _clean_required_string(value: Any) -> str:
     return value.strip()
 
 
+def _error_key_for_exception(err: Exception) -> str:
+    if isinstance(err, UbpetAuthenticationError):
+        return "auth_failed"
+    if isinstance(err, UbpetDeviceListError):
+        return "device_list_failed"
+    if isinstance(err, UbpetUnexpectedResponseError):
+        return "unexpected_response"
+    if isinstance(err, OSError):
+        return "cannot_connect"
+    if isinstance(err, UbpetApiError):
+        return "unexpected_response"
+    return "unknown"
+
+
 class UbpetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -90,11 +113,16 @@ class UbpetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 devices = await self.hass.async_add_executor_job(_validate_input, connection_data)
             except ValueError:
                 errors["base"] = "missing_required"
-            except UbpetApiError:
-                errors["base"] = "auth_failed"
-            except OSError:
-                errors["base"] = "cannot_connect"
+            except (UbpetApiError, OSError) as err:
+                errors["base"] = _error_key_for_exception(err)
+                _LOGGER.warning(
+                    "UPET config flow validation failed stage=%s status=%s error=%s",
+                    getattr(err, "stage", None) or "connect",
+                    getattr(err, "status", None),
+                    type(err).__name__,
+                )
             except Exception:
+                _LOGGER.exception("UPET config flow validation failed with an unknown error")
                 errors["base"] = "unknown"
             else:
                 app_id = _clean_required_string(connection_data[CONF_APP_ID])
