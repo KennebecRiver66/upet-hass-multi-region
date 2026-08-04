@@ -426,7 +426,7 @@ class UbpetClient:
         }
         self._request("PUT", "/catbox-server/box/config/timePeriod/update", payload=payload, auth=True)
 
-    def get_dashboard(self) -> dict[str, Any]:
+    def get_dashboard(self, cat_record_size: int = 1) -> dict[str, Any]:
         self.ensure_login()
         devices = self.get_devices()
         _LOGGER.info("UPET device list returned %s device(s)", len(devices))
@@ -441,7 +441,9 @@ class UbpetClient:
                 "box_use_times": _safe_dict_call(self.get_box_use_times, serial),
                 "deodorant": _safe_dict_call(self.get_deodorant_status, serial),
                 "online": _safe_dict_call(self.get_device_online, serial),
-                "cat_records": _safe_list_call(self.get_box_records, serial, 0, 1),
+                "cat_records": _safe_list_call(
+                    self.get_box_records, serial, 0, cat_record_size
+                ),
                 "device_records": _safe_list_call(self.get_box_records, serial, 1, 1),
             }
         return {

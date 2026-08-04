@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import CoreState, HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later
 
 from .api import UbpetClient
@@ -62,11 +62,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         product=product,
         area_code=area_code,
     )
-    coordinator = UbpetDataUpdateCoordinator(hass, client)
+    coordinator = UbpetDataUpdateCoordinator(hass, client, entry_id=entry.entry_id)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    @callback
+    def _start_visit_history_backfill(_event=None) -> None:
+        coordinator.start_visit_history_backfill()
+
+    if hass.state == CoreState.running:
+        _start_visit_history_backfill()
+    else:
+        entry.async_on_unload(
+            hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED,
+                _start_visit_history_backfill,
+            )
+        )
 
     @callback
     def _enable_mqtt_state_polls(_now) -> None:
@@ -95,5 +109,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         coordinator = hass.data[DOMAIN].pop(entry.entry_id, None)
         if coordinator is not None:
+            coordinator.cancel_visit_history_backfill()
             coordinator.cancel_mqtt_state_polls()
     return unload_ok

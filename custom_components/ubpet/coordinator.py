@@ -8,10 +8,12 @@ import time
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import UbpetApiError, UbpetClient
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .visit_analytics import VisitAnalyticsTracker
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,10 +23,20 @@ MQTT_STATE_PENDING_POLL_SECONDS = 60
 MQTT_STATE_POLL_HEARTBEAT_SECONDS = 1
 MQTT_STATE_REQUEST_TIMEOUT_SECONDS = 30
 MQTT_STATE_IN_PROGRESS_STALE_SECONDS = 45
+VISIT_ANALYTICS_STORAGE_VERSION = 1
+CAT_RECORD_BACKFILL_SIZE = 20
+RECENT_CAT_RECORD_HISTORY_SIZE = 1
 
 
 class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    def __init__(self, hass: HomeAssistant, client: UbpetClient, *, update_interval: timedelta = DEFAULT_SCAN_INTERVAL) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: UbpetClient,
+        *,
+        entry_id: str,
+        update_interval: timedelta = DEFAULT_SCAN_INTERVAL,
+    ) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -33,6 +45,14 @@ class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             always_update=True,
         )
         self.client = client
+        self._visit_analytics_store: Store[dict[str, Any]] = Store(
+            hass,
+            VISIT_ANALYTICS_STORAGE_VERSION,
+            f"{DOMAIN}.{entry_id}.visit_analytics",
+        )
+        self._visit_analytics = VisitAnalyticsTracker()
+        self._visit_analytics_loaded = False
+        self._visit_history_backfill_task: asyncio.Task[None] | None = None
         self._mqtt_state_by_serial: dict[str, dict[str, Any]] = {}
         self._mqtt_state_poll_task: asyncio.Task[None] | None = None
         self._mqtt_state_request_started_at_by_serial: dict[str, datetime] = {}
@@ -44,14 +64,26 @@ class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         started = time.monotonic()
         _LOGGER.info("Starting UPET data update")
+        await self._async_load_visit_analytics()
         try:
-            data = await self.hass.async_add_executor_job(self.client.get_dashboard)
+            data = await self.hass.async_add_executor_job(
+                self.client.get_dashboard,
+                RECENT_CAT_RECORD_HISTORY_SIZE,
+            )
         except (OSError, RuntimeError, UbpetApiError) as err:
             _LOGGER.exception("UPET data update failed")
             raise UpdateFailed(str(err)) from err
 
         devices = data.get("devices", {})
         cats = data.get("cats", [])
+        if isinstance(cats, list):
+            now = datetime.now(UTC)
+            if self._visit_analytics.process(
+                cats,
+                records=_cat_records(devices),
+                now=now,
+            ):
+                await self._async_save_visit_analytics()
         _LOGGER.info(
             "Finished UPET data update in %.2fs: devices=%s cats=%s",
             time.monotonic() - started,
@@ -64,6 +96,88 @@ class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._ensure_mqtt_state_poll_task()
             self._ensure_mqtt_state_polls(data)
         return data
+
+    def cat_poo_duration_threshold(self, cat_id: str) -> int:
+        return self._visit_analytics.threshold(cat_id)
+
+    async def async_set_cat_poo_duration_threshold(
+        self,
+        cat_id: str,
+        seconds: float,
+    ) -> None:
+        await self._async_load_visit_analytics()
+        if not self._visit_analytics.set_threshold(cat_id, seconds):
+            return
+        cats = self.data.get("cats", []) if self.data else []
+        if isinstance(cats, list):
+            self._visit_analytics.attach_analytics(cats, now=datetime.now(UTC))
+        await self._async_save_visit_analytics()
+        self.async_update_listeners()
+
+    async def _async_load_visit_analytics(self) -> None:
+        if self._visit_analytics_loaded:
+            return
+        stored = await self._visit_analytics_store.async_load()
+        self._visit_analytics = VisitAnalyticsTracker(stored)
+        self._visit_analytics_loaded = True
+
+    async def _async_save_visit_analytics(self) -> None:
+        await self._visit_analytics_store.async_save(
+            self._visit_analytics.to_storage()
+        )
+
+    def start_visit_history_backfill(self) -> None:
+        """Start a non-blocking history import after Home Assistant is ready."""
+        if (
+            self._visit_history_backfill_task is None
+            or self._visit_history_backfill_task.done()
+        ):
+            self._visit_history_backfill_task = self.hass.async_create_task(
+                self._async_backfill_visit_history()
+            )
+
+    def cancel_visit_history_backfill(self) -> None:
+        if self._visit_history_backfill_task is not None:
+            self._visit_history_backfill_task.cancel()
+            self._visit_history_backfill_task = None
+
+    async def _async_backfill_visit_history(self) -> None:
+        """Import retained vendor records without delaying integration setup."""
+        data = self.data or {}
+        devices = data.get("devices")
+        if not isinstance(devices, dict) or not devices:
+            return
+
+        records: list[dict[str, Any]] = []
+        for serial in devices:
+            try:
+                device_records = await self.hass.async_add_executor_job(
+                    self.client.get_box_records,
+                    serial,
+                    0,
+                    CAT_RECORD_BACKFILL_SIZE,
+                )
+            except (OSError, RuntimeError, UbpetApiError) as err:
+                _LOGGER.warning("UPET visit history backfill failed: %s", err)
+                continue
+            records.extend(device_records)
+
+        cats = data.get("cats")
+        if not isinstance(cats, list):
+            return
+        changed = self._visit_analytics.process(
+            cats,
+            records=records,
+            now=datetime.now(UTC),
+        )
+        if changed:
+            await self._async_save_visit_analytics()
+            self.async_update_listeners()
+        _LOGGER.info(
+            "Finished UPET visit history backfill: records=%s changed=%s",
+            len(records),
+            changed,
+        )
 
     def store_mqtt_result(self, serial: str, result: dict[str, Any] | object) -> bool:
         state = _latest_mqtt_state(result)
@@ -247,6 +361,23 @@ class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             MQTT_STATE_IN_PROGRESS_STALE_SECONDS,
         )
         return True
+
+
+def _cat_records(devices: Any) -> list[dict[str, Any]]:
+    """Flatten cat-usage records returned for every litter box."""
+    if not isinstance(devices, dict):
+        return []
+    records: list[dict[str, Any]] = []
+    for device in devices.values():
+        if not isinstance(device, dict):
+            continue
+        device_records = device.get("cat_records")
+        if not isinstance(device_records, list):
+            continue
+        records.extend(
+            record for record in device_records if isinstance(record, dict)
+        )
+    return records
 
 
 def _latest_mqtt_state(result: dict[str, Any] | object) -> dict[str, Any] | None:

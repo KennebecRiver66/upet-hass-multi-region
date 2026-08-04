@@ -173,7 +173,7 @@ CAT_SENSORS: tuple[UbpetSensorDescription, ...] = (
     ),
     UbpetSensorDescription(
         key="cat_visits",
-        name="Visits",
+        name="Visits (Legacy)",
         icon="mdi:cat",
         translation_key="cat_visits",
         state_class=SensorStateClass.MEASUREMENT,
@@ -188,6 +188,40 @@ CAT_SENSORS: tuple[UbpetSensorDescription, ...] = (
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda item: item.get("costTime"),
+    ),
+    UbpetSensorDescription(
+        key="cat_pee_visits_24h",
+        name="Pee in 24 hours",
+        icon="mdi:water-outline",
+        translation_key="cat_pee_visits_24h",
+        native_unit_of_measurement="visits",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda item: _cat_analytics_value(item, "pee_visits_24h"),
+    ),
+    UbpetSensorDescription(
+        key="cat_poo_visits_24h",
+        name="Poo in 24 hours",
+        icon="mdi:emoticon-poop-outline",
+        translation_key="cat_poo_visits_24h",
+        native_unit_of_measurement="visits",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda item: _cat_analytics_value(item, "poo_visits_24h"),
+    ),
+    UbpetSensorDescription(
+        key="cat_last_pee",
+        name="Last pee",
+        icon="mdi:clock-outline",
+        translation_key="cat_last_pee",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda item: _cat_analytics_value(item, "last_pee"),
+    ),
+    UbpetSensorDescription(
+        key="cat_last_poo",
+        name="Last poo",
+        icon="mdi:clock-outline",
+        translation_key="cat_last_poo",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda item: _cat_analytics_value(item, "last_poo"),
     ),
 )
 
@@ -317,6 +351,13 @@ def _firmware_version(config: dict[str, Any]) -> str | None:
         }
     )
     return ", ".join(versions) if versions else None
+
+
+def _cat_analytics_value(cat: dict[str, Any], key: str) -> Any:
+    analytics = cat.get("visit_analytics")
+    if not isinstance(analytics, dict):
+        return None
+    return analytics.get(key)
 
 
 def _seconds_to_minutes(value: Any) -> int | float | None:

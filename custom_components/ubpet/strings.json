@@ -54,10 +54,22 @@
         "name": "Weight"
       },
       "cat_visits": {
-        "name": "Visits"
+        "name": "Visits (Legacy)"
       },
       "cat_cost_time": {
         "name": "Usage duration"
+      },
+      "cat_pee_visits_24h": {
+        "name": "Pee in 24 hours"
+      },
+      "cat_poo_visits_24h": {
+        "name": "Poo in 24 hours"
+      },
+      "cat_last_pee": {
+        "name": "Last pee"
+      },
+      "cat_last_poo": {
+        "name": "Last poo"
       },
       "firmware_version": {
         "name": "Firmware version"
@@ -107,6 +119,9 @@
     "number": {
       "auto_clean_delay": {
         "name": "Auto clean delay"
+      },
+      "cat_poo_duration_threshold": {
+        "name": "Poo duration threshold"
       }
     },
     "switch": {

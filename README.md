@@ -40,6 +40,7 @@ For safer use, create a separate UPET/Airrobo account and share litter box acces
 - Device discovery from the vendor cloud account.
 - Read-only box, waste-bin, deodorant, online, and firmware data.
 - Cat profile sensors and cat picture URL attributes when returned by the API.
+- Per-cat visit analytics with a configurable Poo duration threshold.
 - Config controls for confirmed settings:
   - Auto clean delay.
   - Auto clean on/off.
@@ -62,7 +63,7 @@ For safer use, create a separate UPET/Airrobo account and share litter box acces
   - Work state.
   - Work cause.
   - Last successful MQTT status update.
-- Diagnostics download with sanitized raw API/coordinator data.
+- Privacy-preserving structural diagnostics without raw user or device values.
 - Local brand icons for supported Home Assistant versions.
 
 ## Installation
@@ -170,8 +171,22 @@ Device buttons:
 Cat sensors:
 
 - Weight.
-- Visits.
+- Visits (Legacy vendor daily counter).
 - Usage duration.
+- Pee in the last 24 hours.
+- Poo in the last 24 hours.
+- Last Pee timestamp.
+- Last Poo timestamp.
+
+Cat configuration:
+
+- Poo duration threshold from 10 to 150 seconds. The default is 100 seconds and it can be configured independently for every cat.
+
+A visit with a duration greater than or equal to the configured threshold is classified as Poo; a shorter visit is classified as Pee. Changing the threshold immediately recalculates the counters and last-event timestamps from locally retained visit data. Visit data and thresholds are stored locally and survive Home Assistant restarts.
+
+The mandatory startup update loads only the latest individual usage record. After Home Assistant reports that startup is complete, the integration loads up to 20 recent records in the background and uses their event timestamps, durations, and cat assignments to initialize the rolling 24-hour counters. Later updates are deduplicated by the vendor record ID. The vendor's daily `Visits (Legacy)` counter is displayed as received but is not used for Pee/Poo analytics.
+
+Backfilled records update the current sensor values, but Home Assistant Recorder history is not backdated; after an upgrade, the graph starts when the integration first publishes the calculated values.
 
 Cat picture URLs are exposed as cat entity attributes when returned by the vendor API.
 
@@ -217,6 +232,7 @@ Confirmed operation ordinals:
 ## Limitations
 
 - The integration depends on the vendor cloud and vendor IM/MQTT service.
+- Visit analytics depend on the vendor retaining individual usage records. The integration requests the 20 most recent records in the background after startup and retains up to 10,000 imported visits per cat for threshold recalculation and last-event timestamps.
 - Commands are confirmed by MQTT delivery/status responses, but full semantic validation of every receipt/error cause is not complete.
 - Control board / child lock is currently exposed as read-only because the observed API flow returns a permission error for writes.
 - Deodorize, direct light control, camera toggle, and full-alert threshold controls are not implemented yet.
@@ -249,6 +265,7 @@ The current tests cover:
 - IM credential/contact lookup.
 - MQTT codec, packet helpers, RISP/protobuf payload generation, and service ordinals.
 - Diagnostics redaction.
+- Per-cat visit analytics, configurable thresholds, and the inclusive Poo boundary.
 
 ## Implementation Notes
 

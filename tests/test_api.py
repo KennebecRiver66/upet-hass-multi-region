@@ -848,6 +848,7 @@ class ApiUnitTests(unittest.TestCase):
 
     def test_dashboard_keeps_required_device_when_optional_endpoint_fails(self):
         client = self.make_client()
+        record_requests = []
         client.auth = api.UbpetAuth(token="token", refresh_token=None, expires_at_ms=9999999999999, user_id=1)
         client.get_devices = lambda: [{"serialNumber": "SN123", "deviceName": "Box"}]
         client.get_all_config = lambda serial: {"wifiName": "wifi"}
@@ -855,13 +856,20 @@ class ApiUnitTests(unittest.TestCase):
         client.get_deodorant_status = lambda serial: (_ for _ in ()).throw(api.UbpetApiError(500, {"code": 1}))
         client.get_device_online = lambda serial: {"online": True}
         client.get_cats = lambda: [{"catInfoId": 5, "nickname": "Cat"}]
+        client.get_box_records = lambda serial, message_type, size=1: (
+            record_requests.append((serial, message_type, size)) or []
+        )
 
-        data = client.get_dashboard()
+        data = client.get_dashboard(100)
 
         self.assertEqual(data["devices"]["SN123"]["device"]["deviceName"], "Box")
         self.assertEqual(data["devices"]["SN123"]["config"]["wifiName"], "wifi")
         self.assertEqual(data["devices"]["SN123"]["deodorant"], {})
         self.assertEqual(data["cats"][0]["nickname"], "Cat")
+        self.assertEqual(
+            record_requests,
+            [("SN123", 0, 100), ("SN123", 1, 1)],
+        )
 
     def test_require_helpers_reject_bad_shapes(self):
         with self.assertRaises(api.UbpetApiError):
@@ -930,5 +938,35 @@ class DiagnosticsUnitTests(unittest.TestCase):
         self.assertEqual(redacted["mqttPassword"], diagnostics.REDACTED)
         self.assertEqual(redacted["config"]["wifiName"], "My_IoT")
         self.assertEqual(redacted["config"]["gmtTimeZone"], "GMT+03:00")
-        self.assertEqual(redacted["cats"][0]["nickname"], "Cat")
+        self.assertEqual(redacted["cats"][0]["nickname"], diagnostics.REDACTED)
         self.assertEqual(redacted["cats"][0]["icon"], diagnostics.REDACTED)
+
+    def test_structural_summary_does_not_copy_personal_values(self):
+        diagnostics = load_diagnostics_module()
+        payload = {
+            "devices": {
+                "PRIVATE-SERIAL": {
+                    "device": {"deviceName": "Private device"},
+                    "config": {"wifiName": "Private Wi-Fi"},
+                }
+            },
+            "cats": [
+                {
+                    "catInfoId": 42,
+                    "nickname": "Private cat",
+                    "weight": 4.8,
+                }
+            ],
+        }
+
+        summary = diagnostics._diagnostic_data_summary(payload)
+
+        self.assertEqual(summary["device_count"], 1)
+        self.assertEqual(summary["cat_count"], 1)
+        self.assertEqual(
+            summary["record_counts"],
+            [{"cat_records": None, "device_records": None}],
+        )
+        self.assertNotIn("PRIVATE-SERIAL", str(summary))
+        self.assertNotIn("Private", str(summary))
+        self.assertNotIn("4.8", str(summary))

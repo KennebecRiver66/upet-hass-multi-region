@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
+from homeassistant.components.number import (
+    NumberDeviceClass,
+    NumberEntity,
+    NumberEntityDescription,
+    NumberMode,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
@@ -13,6 +18,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import UbpetDataUpdateCoordinator
+from .visit_analytics import (
+    MAX_POO_DURATION_THRESHOLD_SECONDS,
+    MIN_POO_DURATION_THRESHOLD_SECONDS,
+)
 
 AUTO_CLEAN_DELAY = NumberEntityDescription(
     key="auto_clean_delay",
@@ -27,11 +36,36 @@ AUTO_CLEAN_DELAY = NumberEntityDescription(
     mode=NumberMode.SLIDER,
 )
 
+POO_DURATION_THRESHOLD = NumberEntityDescription(
+    key="cat_poo_duration_threshold",
+    name="Poo duration threshold",
+    icon="mdi:timer-cog-outline",
+    translation_key="cat_poo_duration_threshold",
+    native_min_value=MIN_POO_DURATION_THRESHOLD_SECONDS,
+    native_max_value=MAX_POO_DURATION_THRESHOLD_SECONDS,
+    native_step=1,
+    native_unit_of_measurement=UnitOfTime.SECONDS,
+    device_class=NumberDeviceClass.DURATION,
+    entity_category=EntityCategory.CONFIG,
+    mode=NumberMode.BOX,
+)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     coordinator: UbpetDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
     entities: list[NumberEntity] = []
     for serial in coordinator.data.get("devices", {}):
         entities.append(UbpetAutoCleanDelayNumber(coordinator, entry.entry_id, serial))
+    for cat in coordinator.data.get("cats", []):
+        cat_id = cat.get("catInfoId")
+        if cat_id is not None:
+            entities.append(
+                UbpetCatPooDurationThresholdNumber(
+                    coordinator,
+                    entry.entry_id,
+                    str(cat_id),
+                )
+            )
     async_add_entities(entities)
 
 
@@ -69,6 +103,51 @@ class UbpetAutoCleanDelayNumber(CoordinatorEntity[UbpetDataUpdateCoordinator], N
             minutes,
         )
         await self.coordinator.async_request_refresh()
+
+
+class UbpetCatPooDurationThresholdNumber(
+    CoordinatorEntity[UbpetDataUpdateCoordinator],
+    NumberEntity,
+):
+    entity_description = POO_DURATION_THRESHOLD
+
+    def __init__(
+        self,
+        coordinator: UbpetDataUpdateCoordinator,
+        entry_id: str,
+        cat_id: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._cat_id = cat_id
+        self._attr_unique_id = (
+            f"{entry_id}_cat_{cat_id}_poo_duration_threshold"
+        )
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        cat = self._cat_data or {}
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"cat_{self._cat_id}")},
+            manufacturer="Airrobo / UBT",
+            name=cat.get("nickname") or f"Cat {self._cat_id}",
+        )
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.cat_poo_duration_threshold(self._cat_id)
+
+    async def async_set_native_value(self, value: float) -> None:
+        await self.coordinator.async_set_cat_poo_duration_threshold(
+            self._cat_id,
+            value,
+        )
+
+    @property
+    def _cat_data(self) -> dict[str, Any] | None:
+        for cat in self.coordinator.data.get("cats", []):
+            if str(cat.get("catInfoId")) == self._cat_id:
+                return cat
+        return None
 
 
 def _seconds_to_minutes(value: Any) -> int | float | None:

@@ -54,10 +54,22 @@
         "name": "Вага"
       },
       "cat_visits": {
-        "name": "Відвідування"
+        "name": "Відвідування (Legacy)"
       },
       "cat_cost_time": {
         "name": "Тривалість використання"
+      },
+      "cat_pee_visits_24h": {
+        "name": "Pee за 24 години"
+      },
+      "cat_poo_visits_24h": {
+        "name": "Poo за 24 години"
+      },
+      "cat_last_pee": {
+        "name": "Останній Pee"
+      },
+      "cat_last_poo": {
+        "name": "Останній Poo"
       },
       "firmware_version": {
         "name": "Версія прошивки"
@@ -107,6 +119,9 @@
     "number": {
       "auto_clean_delay": {
         "name": "Затримка автоочищення"
+      },
+      "cat_poo_duration_threshold": {
+        "name": "Поріг тривалості Poo"
       }
     },
     "switch": {
