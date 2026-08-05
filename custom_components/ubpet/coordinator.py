@@ -7,6 +7,7 @@ import logging
 import time
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -34,7 +35,7 @@ class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         client: UbpetClient,
         *,
-        entry_id: str,
+        entry: ConfigEntry,
         update_interval: timedelta = DEFAULT_SCAN_INTERVAL,
     ) -> None:
         super().__init__(
@@ -45,10 +46,11 @@ class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             always_update=True,
         )
         self.client = client
+        self._entry = entry
         self._visit_analytics_store: Store[dict[str, Any]] = Store(
             hass,
             VISIT_ANALYTICS_STORAGE_VERSION,
-            f"{DOMAIN}.{entry_id}.visit_analytics",
+            f"{DOMAIN}.{entry.entry_id}.visit_analytics",
         )
         self._visit_analytics = VisitAnalyticsTracker()
         self._visit_analytics_loaded = False
@@ -132,8 +134,12 @@ class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._visit_history_backfill_task is None
             or self._visit_history_backfill_task.done()
         ):
-            self._visit_history_backfill_task = self.hass.async_create_task(
-                self._async_backfill_visit_history()
+            self._visit_history_backfill_task = (
+                self._entry.async_create_background_task(
+                    self.hass,
+                    self._async_backfill_visit_history(),
+                    "UPET visit history backfill",
+                )
             )
 
     def cancel_visit_history_backfill(self) -> None:
@@ -234,7 +240,11 @@ class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.warning("UPET MQTT state poll loop was cancelled; restarting")
                 except Exception:
                     _LOGGER.exception("UPET MQTT state poll loop died; restarting")
-            self._mqtt_state_poll_task = self.hass.async_create_task(self._mqtt_state_poll_loop())
+            self._mqtt_state_poll_task = self._entry.async_create_background_task(
+                self.hass,
+                self._mqtt_state_poll_loop(),
+                "UPET MQTT state poll loop",
+            )
 
     async def _mqtt_state_poll_loop(self) -> None:
         _LOGGER.info("Starting UPET MQTT state poll loop")
@@ -337,7 +347,11 @@ class UbpetDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if due_at is not None and due_at > now:
                 continue
             _LOGGER.info("Running due UPET MQTT state poll for %s", serial)
-            self.hass.async_create_task(self.async_request_mqtt_state(serial))
+            self._entry.async_create_background_task(
+                self.hass,
+                self.async_request_mqtt_state(serial),
+                f"UPET MQTT state request {serial}",
+            )
 
     def _mqtt_state_poll_delay(self, serial: str) -> int:
         state = _mqtt_work_state(self.data.get("devices", {}).get(serial) if self.data else None)

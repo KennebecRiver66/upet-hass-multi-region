@@ -62,37 +62,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         product=product,
         area_code=area_code,
     )
-    coordinator = UbpetDataUpdateCoordinator(hass, client, entry_id=entry.entry_id)
+    coordinator = UbpetDataUpdateCoordinator(hass, client, entry=entry)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     @callback
-    def _start_visit_history_backfill(_event=None) -> None:
+    def _enable_mqtt_state_polls(_now) -> None:
+        coordinator.enable_mqtt_state_polls()
+
+    @callback
+    def _start_background_tasks(_event=None) -> None:
         coordinator.start_visit_history_backfill()
+        entry.async_on_unload(
+            async_call_later(
+                hass,
+                MQTT_POLL_START_DELAY_SECONDS,
+                _enable_mqtt_state_polls,
+            )
+        )
 
     if hass.state == CoreState.running:
-        _start_visit_history_backfill()
+        _start_background_tasks()
     else:
         entry.async_on_unload(
             hass.bus.async_listen_once(
                 EVENT_HOMEASSISTANT_STARTED,
-                _start_visit_history_backfill,
+                _start_background_tasks,
             )
         )
-
-    @callback
-    def _enable_mqtt_state_polls(_now) -> None:
-        coordinator.enable_mqtt_state_polls()
-
-    entry.async_on_unload(
-        async_call_later(
-            hass,
-            MQTT_POLL_START_DELAY_SECONDS,
-            _enable_mqtt_state_polls,
-        )
-    )
 
     @callback
     def _stop_mqtt_state_polls(_event) -> None:
