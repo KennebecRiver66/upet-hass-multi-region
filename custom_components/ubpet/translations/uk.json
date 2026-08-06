@@ -57,7 +57,10 @@
         "name": "Відвідування (Legacy)"
       },
       "cat_cost_time": {
-        "name": "Тривалість використання"
+        "name": "Середня тривалість використання (Legacy)"
+      },
+      "cat_last_visit_duration": {
+        "name": "Тривалість останнього відвідування"
       },
       "cat_pee_visits_24h": {
         "name": "Pee за 24 години"

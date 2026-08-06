@@ -65,6 +65,23 @@ class VisitAnalyticsTrackerTests(unittest.TestCase):
             datetime(2026, 8, 4, 7, 41, tzinfo=UTC),
         )
 
+    def test_latest_visit_duration_ignores_vendor_daily_average(self) -> None:
+        tracker = VisitAnalyticsTracker()
+        self.cat.update({"number": 3, "costTime": 93.3})
+        records = [
+            self.record(3, 56, self.now - timedelta(hours=7)),
+            self.record(1, 135, self.now - timedelta(minutes=12)),
+            self.record(2, 89, self.now - timedelta(minutes=43)),
+        ]
+
+        tracker.process([self.cat], records=records, now=self.now)
+
+        analytics = self.cat["visit_analytics"]
+        self.assertEqual(analytics["last_visit_duration_seconds"], 135)
+        self.assertEqual(analytics["poo_visits_24h"], 1)
+        self.assertEqual(analytics["pee_visits_24h"], 2)
+        self.assertEqual(self.cat["costTime"], 93.3)
+
     def test_repeated_record_id_is_not_counted_twice(self) -> None:
         tracker = VisitAnalyticsTracker()
         record = self.record(1, 80, self.now - timedelta(minutes=5))
@@ -204,6 +221,9 @@ class VisitAnalyticsTrackerTests(unittest.TestCase):
         self.assertFalse(changed)
         self.assertEqual(self.cat["visit_analytics"]["pee_visits_24h"], 0)
         self.assertEqual(self.cat["visit_analytics"]["poo_visits_24h"], 0)
+        self.assertIsNone(
+            self.cat["visit_analytics"]["last_visit_duration_seconds"]
+        )
 
     def test_threshold_rejects_non_finite_and_out_of_range_values(self) -> None:
         tracker = VisitAnalyticsTracker()

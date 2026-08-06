@@ -172,7 +172,8 @@ Cat sensors:
 
 - Weight.
 - Visits (Legacy vendor daily counter).
-- Usage duration.
+- Average usage duration (Legacy vendor daily aggregate).
+- Last visit duration from the most recent individual usage record.
 - Pee in the last 24 hours.
 - Poo in the last 24 hours.
 - Last Pee timestamp.
@@ -184,7 +185,7 @@ Cat configuration:
 
 A visit with a duration greater than or equal to the configured threshold is classified as Poo; a shorter visit is classified as Pee. Changing the threshold immediately recalculates the counters and last-event timestamps from locally retained visit data. Visit data and thresholds are stored locally and survive Home Assistant restarts.
 
-The mandatory startup update loads only the latest individual usage record. After Home Assistant reports that startup is complete, the integration loads up to 20 recent records in the background and uses their event timestamps, durations, and cat assignments to initialize the rolling 24-hour counters. Later updates are deduplicated by the vendor record ID. The vendor's daily `Visits (Legacy)` counter is displayed as received but is not used for Pee/Poo analytics.
+The mandatory startup update loads only the latest individual usage record. After Home Assistant reports that startup is complete, the integration loads up to 20 recent records in the background and uses their event timestamps, durations, and cat assignments to initialize the rolling 24-hour counters. Later updates are deduplicated by the vendor record ID. The vendor's daily `Visits (Legacy)` and `Average usage duration (Legacy)` aggregates are displayed as received but are not used for Pee/Poo analytics.
 
 Backfilled records update the current sensor values, but Home Assistant Recorder history is not backdated; after an upgrade, the graph starts when the integration first publishes the calculated values.
 

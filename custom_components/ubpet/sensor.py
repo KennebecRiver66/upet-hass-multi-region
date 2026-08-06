@@ -181,13 +181,25 @@ CAT_SENSORS: tuple[UbpetSensorDescription, ...] = (
     ),
     UbpetSensorDescription(
         key="cat_cost_time",
-        name="Usage duration",
+        name="Average usage duration (Legacy)",
         icon="mdi:timer-outline",
         translation_key="cat_cost_time",
         native_unit_of_measurement=UnitOfTime.SECONDS,
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda item: item.get("costTime"),
+    ),
+    UbpetSensorDescription(
+        key="cat_last_visit_duration",
+        name="Last visit duration",
+        icon="mdi:timer-check-outline",
+        translation_key="cat_last_visit_duration",
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda item: _cat_analytics_value(
+            item, "last_visit_duration_seconds"
+        ),
     ),
     UbpetSensorDescription(
         key="cat_pee_visits_24h",

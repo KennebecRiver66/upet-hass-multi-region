@@ -143,9 +143,13 @@ class VisitAnalyticsTracker:
         recent_events = [event for event in events if _event_at(event) >= cutoff]
         poo_events = [event for event in events if _duration(event) >= threshold]
         pee_events = [event for event in events if _duration(event) < threshold]
+        latest_event = max(events, key=_event_at, default=None)
 
         return {
             "poo_duration_threshold_seconds": threshold,
+            "last_visit_duration_seconds": (
+                _duration(latest_event) if latest_event is not None else None
+            ),
             "pee_visits_24h": sum(
                 _duration(event) < threshold for event in recent_events
             ),

@@ -57,7 +57,10 @@
         "name": "Visits (Legacy)"
       },
       "cat_cost_time": {
-        "name": "Usage duration"
+        "name": "Average usage duration (Legacy)"
+      },
+      "cat_last_visit_duration": {
+        "name": "Last visit duration"
       },
       "cat_pee_visits_24h": {
         "name": "Pee in 24 hours"
