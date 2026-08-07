@@ -92,6 +92,14 @@
       "mqtt_work_state": {
         "name": "MQTT стан роботи"
       },
+      "mqtt_pet_position": {
+        "name": "Положення улюбленця",
+        "state": {
+          "inside": "Усередині туалету",
+          "nearby": "Поруч із туалетом",
+          "away": "Далеко від туалету"
+        }
+      },
       "mqtt_work_cause": {
         "name": "MQTT причина стану"
       },

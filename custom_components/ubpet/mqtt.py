@@ -82,6 +82,24 @@ WORK_STATE_APP_NAMES = {
     3: "PAUSED",
 }
 
+CAT_FARAWAY = "CAT_FARAWAY"
+CAT_NEAR_BOX = "CAT_NEAR_BOX"
+CAT_IN_BOX = "CAT_IN_BOX"
+PET_POSITION_BY_CAT_STATE = {
+    CAT_IN_BOX: "inside",
+    CAT_NEAR_BOX: "nearby",
+    CAT_FARAWAY: "away",
+}
+
+MOVEMENT_SERVICES = {
+    "start_clean_up",
+    "resume_clean_up",
+    "start_flatten",
+    "resume_flatten",
+    "start_rise",
+    "start_drop",
+}
+
 OP_MODE_VALUES = {
     "clean": 1,
     "smooth": 3,
@@ -179,6 +197,30 @@ def service_id_map() -> dict[str, dict[str, Any]]:
 SERVICE_ID_MAP = service_id_map()
 _NEXT_SEQ_VALUE = random.randint(1, 0x2710)
 _GID_COUNTER = random.randint(0, 0xFFFFF)
+
+
+def service_available_for_work_state(
+    service_id: str,
+    work_mode: str | None,
+    work_state: str | None,
+    cat_state: str | None,
+) -> bool:
+    """Return whether a device command is valid for the reported work state."""
+    if service_id in MOVEMENT_SERVICES and cat_state != CAT_FARAWAY:
+        return False
+    if service_id in {"start_clean_up", "start_flatten", "start_rise"}:
+        return work_mode == "IDLE"
+    if service_id == "start_drop":
+        return work_mode == "RAKING_UP" and work_state == "PAUSED"
+    if service_id == "pause_clean_up":
+        return work_mode == "CLEANING" and work_state == "RUNNING"
+    if service_id == "resume_clean_up":
+        return work_mode == "CLEANING" and work_state == "PAUSED"
+    if service_id == "pause_flatten":
+        return work_mode == "SMOOTHING" and work_state == "RUNNING"
+    if service_id == "resume_flatten":
+        return work_mode == "SMOOTHING" and work_state == "PAUSED"
+    return False
 
 
 def encode_varint(value: int) -> bytes:
@@ -721,12 +763,23 @@ def summarize_all_state_body(body: bytes) -> dict[str, Any]:
             summary[name] = field["value"]
     w_mode = summary.setdefault("w_mode", 0)
     w_state = summary.setdefault("w_state", 0)
+    toilet_state = summary.setdefault("toilet_state", 0)
+    foreign_state = summary.setdefault("foreign_state", 0)
     if isinstance(w_mode, int):
         summary["w_mode_name"] = WORK_MODE_NAMES.get(w_mode, f"unknown_{w_mode}")
         summary["w_mode_app_name"] = WORK_MODE_APP_NAMES.get(w_mode, f"UNKNOWN_{w_mode}")
     if isinstance(w_state, int):
         summary["w_state_name"] = WORK_STATE_NAMES.get(w_state, f"unknown_{w_state}")
         summary["w_state_app_name"] = WORK_STATE_APP_NAMES.get(w_state, f"UNKNOWN_{w_state}")
+    if toilet_state == 1:
+        summary["cat_state_app_name"] = CAT_IN_BOX
+    elif foreign_state == 1:
+        summary["cat_state_app_name"] = CAT_NEAR_BOX
+    else:
+        summary["cat_state_app_name"] = CAT_FARAWAY
+    summary["pet_position"] = PET_POSITION_BY_CAT_STATE[
+        summary["cat_state_app_name"]
+    ]
     return summary
 
 

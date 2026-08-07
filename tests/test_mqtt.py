@@ -121,8 +121,21 @@ class MqttCodecUnitTests(unittest.TestCase):
         self.assertEqual(decoded["w_state"], 0)
         self.assertEqual(decoded["w_state_name"], "idle")
         self.assertEqual(decoded["w_state_app_name"], "PENDING")
+        self.assertEqual(decoded["toilet_state"], 0)
+        self.assertEqual(decoded["foreign_state"], 0)
+        self.assertEqual(decoded["cat_state_app_name"], "CAT_FARAWAY")
+        self.assertEqual(decoded["pet_position"], "away")
         self.assertEqual(decoded["w_cause"], 90)
         self.assertEqual(decoded["timestamp"], 1781260086)
+
+    def test_all_state_response_decodes_cat_presence(self):
+        inside = mqtt.summarize_all_state_body(bytes.fromhex("2001"))
+        nearby = mqtt.summarize_all_state_body(bytes.fromhex("2801"))
+
+        self.assertEqual(inside["cat_state_app_name"], "CAT_IN_BOX")
+        self.assertEqual(inside["pet_position"], "inside")
+        self.assertEqual(nearby["cat_state_app_name"], "CAT_NEAR_BOX")
+        self.assertEqual(nearby["pet_position"], "nearby")
 
     def test_service_ids_map_to_app_operation_ordinals(self):
         services = mqtt.SERVICE_ID_MAP
@@ -154,6 +167,30 @@ class MqttCodecUnitTests(unittest.TestCase):
         self.assertNotIn("start_clean_up_mode2_state1", services)
         self.assertNotIn("request_state_gid100", services)
         self.assertNotIn("start_clean_up_gid100", services)
+
+    def test_command_availability_matches_state_and_cat_safety(self):
+        """The litter box reports RUNNING even while its work mode is IDLE."""
+        cases = (
+            ("start_clean_up", "IDLE", "RUNNING", "CAT_FARAWAY", True),
+            ("start_flatten", "IDLE", "RUNNING", "CAT_FARAWAY", True),
+            ("start_rise", "IDLE", "RUNNING", "CAT_FARAWAY", True),
+            ("pause_clean_up", "CLEANING", "RUNNING", "CAT_IN_BOX", True),
+            ("resume_clean_up", "CLEANING", "PAUSED", "CAT_FARAWAY", True),
+            ("pause_flatten", "SMOOTHING", "RUNNING", "CAT_NEAR_BOX", True),
+            ("resume_flatten", "SMOOTHING", "PAUSED", "CAT_FARAWAY", True),
+            ("start_drop", "RAKING_UP", "PAUSED", "CAT_FARAWAY", True),
+            ("start_clean_up", "IDLE", "RUNNING", "CAT_IN_BOX", False),
+            ("start_clean_up", "IDLE", "RUNNING", "CAT_NEAR_BOX", False),
+            ("resume_clean_up", "CLEANING", "PAUSED", None, False),
+            ("start_clean_up", "CLEANING", "RUNNING", "CAT_FARAWAY", False),
+            ("start_clean_up", None, None, None, False),
+        )
+        for service_id, mode, state, cat_state, expected in cases:
+            with self.subTest(service_id=service_id, mode=mode, state=state, cat_state=cat_state):
+                self.assertEqual(
+                    mqtt.service_available_for_work_state(service_id, mode, state, cat_state),
+                    expected,
+                )
 
     def test_resolve_service_payload_builds_expected_clean_command(self):
         self.assertEqual(mqtt.resolve_service_payload("start_clean_up", seq=1).op_body.hex(), "08011001")

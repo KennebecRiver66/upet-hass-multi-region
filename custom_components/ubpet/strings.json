@@ -92,6 +92,14 @@
       "mqtt_work_state": {
         "name": "MQTT work state"
       },
+      "mqtt_pet_position": {
+        "name": "Pet position",
+        "state": {
+          "inside": "Inside litter box",
+          "nearby": "Near litter box",
+          "away": "Away from litter box"
+        }
+      },
       "mqtt_work_cause": {
         "name": "MQTT work cause"
       },

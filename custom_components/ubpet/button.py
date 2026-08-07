@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -14,6 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import UbpetDataUpdateCoordinator
+from .mqtt import MOVEMENT_SERVICES, service_available_for_work_state
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -157,21 +159,8 @@ class UbpetMqttCommandButton(CoordinatorEntity[UbpetDataUpdateCoordinator], Butt
         item = self.coordinator.data.get("devices", {}).get(self._serial)
         mode = _mqtt_work_mode(item)
         state = _mqtt_work_state(item)
-        if state is None:
-            return False
-        if service_id == "start_drop":
-            return mode == "RAKING_UP" and state == "PAUSED"
-        if service_id in {"start_clean_up", "start_flatten", "start_rise"}:
-            return state == "PENDING"
-        if service_id == "pause_clean_up":
-            return mode == "CLEANING" and state == "RUNNING"
-        if service_id == "resume_clean_up":
-            return mode == "CLEANING" and state == "PAUSED"
-        if service_id == "pause_flatten":
-            return mode == "SMOOTHING" and state == "RUNNING"
-        if service_id == "resume_flatten":
-            return mode == "SMOOTHING" and state == "PAUSED"
-        return True
+        cat_state = _mqtt_cat_state(item)
+        return service_available_for_work_state(service_id, mode, state, cat_state)
 
     async def async_press(self) -> None:
         if self.entity_description.service_id == REST_REQUEST_SERVICE:
@@ -182,6 +171,8 @@ class UbpetMqttCommandButton(CoordinatorEntity[UbpetDataUpdateCoordinator], Butt
             _LOGGER.info("Reset UPET waste-bin counter for serial=%s", self._serial)
             await self.coordinator.async_request_refresh()
             return
+        if self.entity_description.service_id in MOVEMENT_SERVICES:
+            await self._async_confirm_safe_movement()
         if self.entity_description.service_id not in DIAGNOSTIC_SERVICES:
             optimistic_state = _optimistic_mqtt_state_for_service(self.entity_description.service_id)
             if optimistic_state:
@@ -207,6 +198,29 @@ class UbpetMqttCommandButton(CoordinatorEntity[UbpetDataUpdateCoordinator], Butt
         elif self.entity_description.service_id not in DIAGNOSTIC_SERVICES:
             self.coordinator.start_mqtt_state_poll(self._serial, fast=True)
 
+    async def _async_confirm_safe_movement(self) -> None:
+        result = await self.hass.async_add_executor_job(
+            self.coordinator.client.send_mqtt_service,
+            self._serial,
+            "request_state",
+        )
+        if isinstance(result, dict):
+            result.setdefault("service_id", "request_state")
+        if not self.coordinator.store_mqtt_result(self._serial, result):
+            raise HomeAssistantError(
+                "Unable to confirm that the litter box is clear; command was not sent"
+            )
+        item = self.coordinator.data.get("devices", {}).get(self._serial)
+        if not service_available_for_work_state(
+            self.entity_description.service_id,
+            _mqtt_work_mode(item),
+            _mqtt_work_state(item),
+            _mqtt_cat_state(item),
+        ):
+            raise HomeAssistantError(
+                "The litter box is not ready or a pet is detected; command was not sent"
+            )
+
 
 def _mqtt_work_state(item: dict[str, Any] | None) -> str | None:
     if not isinstance(item, dict):
@@ -226,6 +240,16 @@ def _mqtt_work_mode(item: dict[str, Any] | None) -> str | None:
         return None
     mode = mqtt_state.get("w_mode_app_name")
     return mode if isinstance(mode, str) else None
+
+
+def _mqtt_cat_state(item: dict[str, Any] | None) -> str | None:
+    if not isinstance(item, dict):
+        return None
+    mqtt_state = item.get("mqtt_state")
+    if not isinstance(mqtt_state, dict):
+        return None
+    state = mqtt_state.get("cat_state_app_name")
+    return state if isinstance(state, str) else None
 
 
 def _optimistic_mqtt_state_for_service(service_id: str) -> dict[str, Any]:

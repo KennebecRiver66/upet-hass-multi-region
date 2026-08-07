@@ -133,6 +133,16 @@ DEVICE_SENSORS: tuple[UbpetSensorDescription, ...] = (
         value_fn=lambda item: _mqtt_state_value(item, "w_state_app_name"),
     ),
     UbpetSensorDescription(
+        key="mqtt_pet_position",
+        name="Pet position",
+        icon="mdi:cat",
+        translation_key="mqtt_pet_position",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=SensorDeviceClass.ENUM,
+        options=["inside", "nearby", "away"],
+        value_fn=lambda item: _mqtt_state_value(item, "pet_position"),
+    ),
+    UbpetSensorDescription(
         key="mqtt_work_cause",
         name="MQTT work cause",
         icon="mdi:alert-circle-outline",
