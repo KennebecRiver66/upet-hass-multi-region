@@ -2,27 +2,27 @@
 
 ## EN
 
-This fork was created because the original integration currently appears to be unmaintained, and attempts to contact its author have not received a response.
+Community-maintained Home Assistant integration for UPET / Airrobo smart cat litter boxes. It provides multi-region account login, device telemetry and configuration, per-cat visit analytics, and live MQTT status and controls with integration-side pet-state checks.
 
-It adds a country selection dialog during setup and routes requests to the appropriate regional UPET server. In particular, this resolves the misleading **“Authentication failed. Check account and password.”** error affecting accounts whose region is set to Russia.
+Setup includes a country selector and routes requests to the appropriate regional UPET server. In particular, this resolves the misleading **“Authentication failed. Check account and password.”** error affecting accounts whose region is set to Russia. The integration has since grown beyond that original fix with independently calculated Pee/Poo analytics, individual visit duration sensors, confirmed device controls, and decoded live device state.
 
-A huge thank you to [@CrazzyBerg](https://github.com/CrazzyBerg), the author of the [original integration](https://github.com/CrazzyBerg/upet-hass). They did the hard work that made this project possible; this fork builds on that foundation rather than replacing it. ❤️
+This project began as a fork because the original integration currently appears to be unmaintained, and attempts to contact its author have not received a response.
+
+A huge thank you to [@CrazzyBerg](https://github.com/CrazzyBerg), the author of the [original integration](https://github.com/CrazzyBerg/upet-hass). They created the foundation that made this project possible. This fork continues and expands that work with multi-region routing, per-cat visit analytics, MQTT controls, and live diagnostics. ❤️
 
 And, of course, thank you to ❤️**UPET / Airrobo**❤️ for creating the hardware and app that inspired this community integration. If your cat needs a smarter throne, please consider supporting the people who made it by choosing an official UPET / Airrobo litter box. 🐈💩
 
-Custom Home Assistant integration for UPET / Airrobo smart cat litter boxes.
-
 ## RU
 
-Этот форк был создан, поскольку оригинальная интеграция, судя по всему, больше не поддерживается, а попытки связаться с её автором остались без ответа.
+Развиваемая сообществом пользовательская интеграция Home Assistant для умных кошачьих туалетов UPET / Airrobo. Она поддерживает вход с учётом региона аккаунта, получение данных и настройку устройства, аналитику посещений для каждого питомца, а также управление и отслеживание состояния через MQTT с дополнительной проверкой состояния питомца на стороне интеграции.
 
-В форк добавлен диалог выбора страны при настройке, а запросы направляются на соответствующий региональный сервер UPET. В частности, это исправляет ошибочное сообщение **«Authentication failed. Check account and password.»**, которое появлялось при использовании аккаунтов с регионом Россия.
+При настройке можно выбрать страну, после чего запросы направляются на соответствующий региональный сервер UPET. В частности, это исправляет ошибочное сообщение **«Authentication failed. Check account and password.»**, которое появлялось при использовании аккаунтов с регионом Россия. С тех пор интеграция стала значительно шире первоначального исправления: появились независимо рассчитываемая аналитика Pee/Poo, сенсоры продолжительности отдельных посещений, проверенные команды управления и расшифрованные состояния устройства в реальном времени.
 
-Огромная благодарность [@CrazzyBerg](https://github.com/CrazzyBerg), автору [оригинальной интеграции](https://github.com/CrazzyBerg/upet-hass). Именно он проделал основную работу, благодаря которой этот проект стал возможен; данный форк развивает заложенную им основу, а не заменяет её. ❤️
+Проект начинался как форк, поскольку оригинальная интеграция, судя по всему, больше не поддерживается, а попытки связаться с её автором остались без ответа.
 
-И, конечно, спасибо ❤️**UPET / Airrobo**❤️ за устройства и приложение, вдохновившие сообщество на создание этой интеграции. Если вашему коту нужен более умный трон, поддержите его создателей, выбрав официальный кошачий лоток UPET / Airrobo. 🐈💩
+Огромная благодарность [@CrazzyBerg](https://github.com/CrazzyBerg), автору [оригинальной интеграции](https://github.com/CrazzyBerg/upet-hass). Именно он создал основу, благодаря которой этот проект стал возможен. Форк продолжает и расширяет эту работу: добавляет поддержку нескольких регионов, аналитику посещений для каждого питомца, управление через MQTT и диагностику в реальном времени. ❤️
 
-Пользовательская интеграция Home Assistant для умных кошачьих лотков UPET / Airrobo.
+И, конечно, спасибо ❤️**UPET / Airrobo**❤️ за устройства и приложение, вдохновившие сообщество на создание этой интеграции. Если вашему коту нужен более умный трон, поддержите его создателей, выбрав официальный кошачий туалет UPET / Airrobo. 🐈💩
 
 This integration uses the vendor cloud API for account/device data and the vendor IM/MQTT channel for live work commands and work-state polling.
 
@@ -37,10 +37,12 @@ For safer use, create a separate UPET/Airrobo account and share litter box acces
 ## Features
 
 - Account login with UPET/Airrobo credentials.
+- Country selection and regional API routing during setup.
 - Device discovery from the vendor cloud account.
 - Read-only box, waste-bin, deodorant, online, and firmware data.
 - Cat profile sensors and cat picture URL attributes when returned by the API.
 - Per-cat visit analytics with a configurable Poo duration threshold.
+- Individual last-visit duration independent of the vendor's legacy daily average.
 - Config controls for confirmed settings:
   - Auto clean delay.
   - Auto clean on/off.
@@ -62,9 +64,31 @@ For safer use, create a separate UPET/Airrobo account and share litter box acces
   - Work mode.
   - Work state.
   - Work cause.
+  - Pet position: inside the litter box, nearby, or away.
   - Last successful MQTT status update.
+- Integration-side pet-state checks before commands that start or resume movement.
 - Privacy-preserving structural diagnostics without raw user or device values.
 - Local brand icons for supported Home Assistant versions.
+
+## Screenshots
+
+### Per-cat visit analytics
+
+Rolling Pee/Poo counters and last-event timestamps are calculated from individual visits. The most recent visit duration is shown separately from the vendor's legacy daily aggregate.
+
+![Per-cat visit analytics](docs/images/visit-analytics.jpeg)
+
+### Configurable Poo threshold
+
+The Pee/Poo duration threshold can be configured independently for every cat.
+
+![Configurable Poo duration threshold](docs/images/poo-duration-threshold.jpeg)
+
+### Live pet position
+
+The diagnostic sensor reports whether a pet is inside the litter box, nearby, or away.
+
+![Live pet position](docs/images/pet-position.jpeg)
 
 ## Installation
 
@@ -132,6 +156,7 @@ Device sensors:
 - MQTT work mode.
 - MQTT work state.
 - MQTT work cause.
+- Pet position.
 - Last REST update.
 - Last MQTT update.
 
@@ -197,6 +222,12 @@ Work commands are sent through the vendor IM/MQTT path, not REST.
 
 The integration obtains MQTT credentials and topics from the vendor API, publishes command payloads to the IM publish topic, and polls `request_state` for live work status.
 
+The litter box may report `IDLE` work mode together with a raw `RUNNING` state. Command availability therefore follows the decoded work mode and the command-specific state transition instead of treating the raw state alone as authoritative.
+
+Before a command that starts or resumes movement, the integration requests a fresh device state. The command is sent only when the device is ready and reports the pet as away from the litter box. A pet reported inside or nearby, an unknown position, or a missing state response blocks the command. Pause commands remain available without this preflight check so movement can always be stopped.
+
+This software check is an additional safeguard and does not replace the litter box's built-in safety mechanisms or responsible supervision.
+
 Polling intervals:
 
 - `RUNNING`: every 1 second.
@@ -235,6 +266,7 @@ Confirmed operation ordinals:
 - The integration depends on the vendor cloud and vendor IM/MQTT service.
 - Visit analytics depend on the vendor retaining individual usage records. The integration requests the 20 most recent records in the background after startup and retains up to 10,000 imported visits per cat for threshold recalculation and last-event timestamps.
 - Commands are confirmed by MQTT delivery/status responses, but full semantic validation of every receipt/error cause is not complete.
+- Pet-position command guards depend on the state reported by the device and cannot guarantee physical safety on their own.
 - Control board / child lock is currently exposed as read-only because the observed API flow returns a permission error for writes.
 - Deodorize, direct light control, camera toggle, and full-alert threshold controls are not implemented yet.
 
@@ -265,6 +297,7 @@ The current tests cover:
 - Settings payload builders.
 - IM credential/contact lookup.
 - MQTT codec, packet helpers, RISP/protobuf payload generation, and service ordinals.
+- MQTT command availability and pet-position safety states.
 - Diagnostics redaction.
 - Per-cat visit analytics, configurable thresholds, and the inclusive Poo boundary.
 
