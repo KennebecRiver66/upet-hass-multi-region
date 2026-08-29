@@ -30,9 +30,12 @@ from .const import (
     DEFAULT_APP_KEY,
     DEFAULT_PRODUCT,
     DOMAIN,
-    EU_BASE_URL,
-    RUSSIA_BASE_URL,
+    CONF_REGION,
+    DEFAULT_REGION,
+    REGION_BASE_URLS,
     SUPPORTED_COUNTRIES,
+    base_url_for_region,
+    suggested_region_for_country,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,9 +57,27 @@ def _schema(
         if selected_country
         else vol.Required(CONF_COUNTRY)
     )
+    selected_region = defaults.get(CONF_REGION)
+    if selected_region not in REGION_BASE_URLS:
+        selected_region = (
+            suggested_region_for_country(selected_country)
+            if selected_country
+            else DEFAULT_REGION
+        )
     fields: dict[Any, Any] = {
         country_field: selector.CountrySelector(
             selector.CountrySelectorConfig(countries=list(SUPPORTED_COUNTRIES))
+        ),
+        vol.Required(CONF_REGION, default=selected_region): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    {"value": "eu", "label": "UPET (Europe, UK, Turkey)"},
+                    {"value": "na", "label": "UPET-NA (North America, Brazil)"},
+                    {"value": "asia", "label": "UPET-ASIA (Japan, South Korea)"},
+                    {"value": "ru", "label": "Russia"},
+                ],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
         ),
         vol.Required(CONF_USERNAME, default=defaults.get(CONF_USERNAME, "")): str,
         vol.Required(CONF_PASSWORD): selector.TextSelector(
@@ -76,13 +97,17 @@ def _schema(
 
 def _country_connection_data(user_input: dict[str, Any]) -> dict[str, Any]:
     country = _clean_country(user_input.get(CONF_COUNTRY))
+    region = user_input.get(CONF_REGION)
+    if region not in REGION_BASE_URLS:
+        region = suggested_region_for_country(country)
     return {
         **user_input,
         CONF_COUNTRY: country,
+        CONF_REGION: region,
         CONF_APP_KEY: DEFAULT_APP_KEY or user_input.get(CONF_APP_KEY),
         CONF_APP_ID: DEFAULT_APP_ID or user_input.get(CONF_APP_ID),
         CONF_AREA_CODE: country,
-        CONF_BASE_URL: RUSSIA_BASE_URL if country == "RU" else EU_BASE_URL,
+        CONF_BASE_URL: base_url_for_region(region),
         CONF_PRODUCT: DEFAULT_PRODUCT or user_input.get(CONF_PRODUCT),
         CONF_DEVICE_ID: uuid.uuid4().hex,
     }
