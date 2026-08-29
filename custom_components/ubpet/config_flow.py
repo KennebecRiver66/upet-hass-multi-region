@@ -75,6 +75,10 @@ def _schema(
                     {"value": "na", "label": "UPET-NA (North America, Brazil)"},
                     {"value": "asia", "label": "UPET-ASIA (Japan, South Korea)"},
                     {"value": "ru", "label": "Russia"},
+                    {"value": "airpet_na", "label": "AIR PET / AIRROBO (North America)"},
+                    {"value": "airpet_eu", "label": "AIR PET / AIRROBO (Europe)"},
+                    {"value": "airpet_global", "label": "AIR PET / AIRROBO (Global)"},
+                    {"value": "airpet_cn", "label": "AIR PET / AIRROBO (China)"},
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
