@@ -54,11 +54,31 @@ CONF_REGION = "region"
 #   (Russia)    Russia
 #
 # Region names above come from the UPET privacy policy's data-residency table.
+# The AIR PET / AIRROBO-branded apps talk to a SECOND backend family on
+# ubtrobot.com rather than airrobo-home.com. Same API surface - all of these
+# answer PUT /user-service-rest/v2/user/login with UBTECH's {code, message}
+# envelope - but they are a separate account namespace. An account created in
+# AIR PET does not exist on airrobo-home.com and vice versa; the server
+# replies 2004 "user does not exist" rather than a password error, which is
+# the signature of hitting the wrong backend family entirely.
+#
+# The ubtrobot.com hosts validate the password field BEFORE the account field,
+# where airrobo-home.com validates account first. That difference in ordering
+# suggests a different service generation, not just a different deployment.
+AIRPET_NA_BASE_URL = "https://apis-na.ubtrobot.com"
+AIRPET_EU_BASE_URL = "https://apis-eu.ubtrobot.com"
+AIRPET_GLOBAL_BASE_URL = "https://apis.ubtrobot.com"
+AIRPET_CN_BASE_URL = "https://airpet.ubtrobot.com"
+
 REGION_BASE_URLS = {
     "eu": EU_BASE_URL,
     "na": NA_BASE_URL,
     "asia": JAPAN_BASE_URL,
     "ru": RUSSIA_BASE_URL,
+    "airpet_na": AIRPET_NA_BASE_URL,
+    "airpet_eu": AIRPET_EU_BASE_URL,
+    "airpet_global": AIRPET_GLOBAL_BASE_URL,
+    "airpet_cn": AIRPET_CN_BASE_URL,
 }
 DEFAULT_REGION = "eu"
 
